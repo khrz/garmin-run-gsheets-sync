@@ -2,7 +2,14 @@ name: Garmin to Google Sheets Sync
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Runs daily at 6 AM UTC
+    # 04:00 UTC = 06:00 DE (Sommer) / 05:00 DE (Winter)
+    # 05:00 UTC = 07:00 DE (Sommer) / 06:00 DE (Winter)
+    # 10:00 UTC = 12:00 DE (Sommer) / 11:00 DE (Winter)
+    # 11:00 UTC = 13:00 DE (Sommer) / 12:00 DE (Winter)
+    # 18:00 UTC = 20:00 DE (Sommer) / 19:00 DE (Winter)
+    # 19:00 UTC = 21:00 DE (Sommer) / 20:00 DE (Winter)
+    
+    - cron: '0 4,5,10,11,18,19 * * *'
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
