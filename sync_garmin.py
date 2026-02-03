@@ -50,8 +50,8 @@ def main():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheet_id).sheet1
 
-    # Vorhandene Daten abrufen
-    existing_data = sheet.get_all_values()
+   # Alle Daten abrufen
+    all_rows = sheet.get_all_values()
     
     # Kopfzeilen definieren
     headers = [
@@ -64,14 +64,15 @@ def main():
         "Elapsed Time", "Min Elevation", "Max Elevation"
     ]
 
-    # Falls das Sheet leer ist: Header einfügen
-    if not existing_data:
+    # Prüfen, ob die erste Zeile die Header enthält
+    if not all_rows or all_rows[0][0] != "Date":
+        print("Header nicht gefunden oder Sheet leer. Erstelle Header...")
         sheet.insert_row(headers, 1)
-        print("✅ Header-Zeile wurde neu erstellt.")
-        existing_dates = set()
-    else:
-        # Bestehende Startzeiten sammeln, um Duplikate zu vermeiden
-        existing_dates = {row[0] for row in existing_data if row}
+        # Wir laden die Daten neu, damit die Indizes für die Duplikatprüfung stimmen
+        all_rows = sheet.get_all_values()
+    
+    # Bestehende Startzeiten sammeln (Spalte 1), um Duplikate zu vermeiden
+    existing_dates = {row[0] for row in all_rows if row}
 
     new_entries = 0
     # Wir drehen die Liste um (reversed), damit der älteste Lauf zuerst hinzugefügt wird
