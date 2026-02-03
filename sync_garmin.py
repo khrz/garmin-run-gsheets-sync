@@ -7,166 +7,98 @@ import garth
 from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
 import gspread
-from datetime import datetime, timedelta
-
-# Load environment variables
-if os.path.exists('.env'):
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
-
-def format_duration(seconds):
-    """Convert seconds to minutes (rounded to 2 decimals)"""
-    return round(seconds / 60, 2) if seconds else 0
-
-def format_pace(distance_meters, duration_seconds):
-    """Calculate pace in min/km"""
-    if not distance_meters or not duration_seconds:
-        return 0
-    distance_km = distance_meters / 1000
-    pace_seconds = duration_seconds / distance_km
-    return round(pace_seconds / 60, 2)
 
 def main():
-    print("Starting Garmin running activities sync...")
+    print("Starting extended Garmin sync...")
     
-    # Get credentials from environment variables
+    # Credentials laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
     garmin_password = os.environ.get('GARMIN_PASSWORD')
     google_creds_json = os.environ.get('GOOGLE_CREDENTIALS')
     sheet_id = os.environ.get('SHEET_ID')
-    session_base64 = os.environ.get('GARMIN_SESSION_BASE64') # Neues Secret
+    session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
     
-    if not all([google_creds_json, sheet_id]):
-        print("❌ Missing required Google environment variables")
-        return
-
-    # --- GARMIN LOGIN START ---
+    # Garmin Login (Session-Logik)
     print("Connecting to Garmin...")
     garmin = None
-
-    # Versuch 1: Login via Session-Token (Umgeht 2FA)
     if session_base64:
         try:
-            print("Attempting login via Session-Token...")
             decoded_data = base64.b64decode(session_base64)
             with zipfile.ZipFile(io.BytesIO(decoded_data)) as z:
                 z.extractall('session_data')
-            
             garth.resume('session_data')
             garmin = Garmin()
             garmin.garth = garth.client
             print("✅ Login via Session successful")
         except Exception as e:
-            print(f"⚠️ Session login failed: {e}")
+            print(f"⚠️ Session failed: {e}")
 
-    # Versuch 2: Fallback auf Passwort (falls Session fehlt oder abgelaufen ist)
     if not garmin or not garmin.garth.profile:
-        print("Attempting standard login with password...")
-        try:
-            garmin = Garmin(garmin_email, garmin_password)
-            garmin.login()
-            print("✅ Standard login successful")
-        except Exception as e:
-            print(f"❌ All login attempts failed: {e}")
-            return
-    # --- GARMIN LOGIN ENDE ---
+        garmin = Garmin(garmin_email, garmin_password)
+        garmin.login()
+
+    # Aktivitäten holen
+    activities = garmin.get_activities(0, 20)
     
-    # Get recent activities
-    print("Fetching recent activities...")
-    try:
-        activities = garmin.get_activities(0, 20)
-        print(f"Found {len(activities)} total activities")
-    except Exception as e:
-        print(f"❌ Failed to fetch activities: {e}")
-        return
-    
-    # Filter for running activities only
-    running_activities = [
-        activity for activity in activities 
-        if activity.get('activityType', {}).get('typeKey', '').lower() in ['running', 'treadmill_running', 'trail_running']
-    ]
-    
-    print(f"Found {len(running_activities)} running activities")
-    
-    if not running_activities:
-        print("No running activities found in recent data")
-        return
-    
-    # Connect to Google Sheets
-    print("Connecting to Google Sheets...")
-    try:
-        creds_dict = json.loads(google_creds_json)
-        creds = Credentials.from_service_account_info(
-            creds_dict,
-            scopes=[
-                'https://www.googleapis.com/auth/spreadsheets',
-                'https://www.googleapis.com/auth/drive'
-            ]
-        )
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(sheet_id).sheet1 # Nutzt jetzt die SHEET_ID direkt
-        print("✅ Connected to Google Sheets")
-    except Exception as e:
-        print(f"❌ Failed to connect to Google Sheets: {e}")
-        return
-    
-    # Get existing dates to avoid duplicates
-    try:
-        existing_data = sheet.get_all_values()
-        existing_dates = set()
-        if len(existing_data) > 1:
-            for row in existing_data[1:]:
-                if row and row[0]:
-                    existing_dates.add(row[0])
-        print(f"Found {len(existing_dates)} existing entries")
-    except Exception as e:
-        print(f"Warning: Could not check existing data: {e}")
-        existing_dates = set()
-    
-    # Process each running activity
+    # Google Sheets Verbindung
+    creds_dict = json.loads(google_creds_json)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(sheet_id).sheet1
+
+    # Vorhandene Daten prüfen
+    existing_data = sheet.get_all_values()
+    existing_dates = {row[0] for row in existing_data if row}
+
     new_entries = 0
-    for activity in running_activities:
-        try:
-            activity_date = activity.get('startTimeLocal', '')[:10]
-            
-            if activity_date in existing_dates:
-                print(f"Skipping {activity_date} - already exists")
-                continue
-            
-            activity_name = activity.get('activityName', 'Run')
-            distance_meters = activity.get('distance', 0)
-            distance_km = round(distance_meters / 1000, 2) if distance_meters else 0
-            duration_seconds = activity.get('duration', 0)
-            duration_min = format_duration(duration_seconds)
-            avg_pace = format_pace(distance_meters, duration_seconds)
-            avg_hr = activity.get('averageHR', 0) or 0
-            max_hr = activity.get('maxHR', 0) or 0
-            calories = activity.get('calories', 0) or 0
-            avg_cadence = activity.get('averageRunningCadenceInStepsPerMinute', 0) or 0
-            elevation_gain = round(activity.get('elevationGain', 0), 1) if activity.get('elevationGain') else 0
-            activity_type = activity.get('activityType', {}).get('typeKey', 'running')
-            
-            row = [
-                activity_date, activity_name, distance_km, duration_min,
-                avg_pace, avg_hr, max_hr, calories, avg_cadence,
-                elevation_gain, activity_type
-            ]
-            
-            sheet.append_row(row)
-            print(f"✅ Added: {activity_date} - {activity_name} ({distance_km} km)")
-            new_entries += 1
-            
-        except Exception as e:
-            print(f"❌ Error processing activity: {e}")
+    for act in activities:
+        # Datum extrahieren (als ID zur Vermeidung von Duplikaten)
+        date_str = act.get('startTimeLocal', '')[:10]
+        full_start_time = act.get('startTimeLocal', '') # Für präzisere Unterscheidung bei 2 Trainings am Tag
+        
+        # Check ob Eintrag schon existiert (Datum + Startzeit wäre idealer, hier bleibe ich beim Datum)
+        if full_start_time in existing_dates or date_str in existing_dates:
             continue
-    
-    if new_entries > 0:
-        print(f"\n🎉 Successfully added {new_entries} new running activities!")
-    else:
-        print("\n✓ No new activities to add")
+
+        # Daten-Extraktion (Mapping der Garmin API Keys auf deine Liste)
+        row = [
+            full_start_time,                                         # Date
+            act.get('activityType', {}).get('typeKey', ''),          # Type
+            act.get('activityName', ''),                             # Title
+            round(act.get('distance', 0) / 1000, 2),                # Distance (km)
+            act.get('calories', 0),                                  # Calories
+            round(act.get('duration', 0) / 60, 2),                   # Duration (min)
+            act.get('averageHR', 0),                                 # Avg HR
+            act.get('maxHR', 0),                                     # Max HR
+            act.get('aerobicTrainingEffect', 0),                     # Aerobic TE
+            act.get('averageRunningCadenceInStepsPerMinute', 0),     # Avg Run Cadence
+            act.get('maxRunningCadenceInStepsPerMinute', 0),         # Max Run Cadence
+            round(act.get('averageSpeed', 0) * 3.6, 2),              # Avg Speed (km/h)
+            round(act.get('maxSpeed', 0) * 3.6, 2),                  # Max Speed (km/h)
+            round(act.get('elevationGain', 0), 1),                   # Total Ascent
+            round(act.get('elevationLoss', 0), 1),                   # Total Descent
+            round(act.get('avgStrideLength', 0) / 100, 2),           # Avg Stride Length (m)
+            act.get('vO2MaxValue', 0),                               # Platzhalter für Vertical Ratio/VO2
+            act.get('avgVerticalOscillation', 0),                    # Avg Vertical Oscillation
+            act.get('avgGroundContactTime', 0),                      # Avg GCT
+            act.get('avgGradeAdjustedSpeed', 0),                     # Avg GAP
+            act.get('avgPower', 0),                                  # Avg Power
+            act.get('maxPower', 0),                                  # Max Power
+            act.get('steps', 0),                                     # Steps
+            act.get('bodyBatteryDrainValue', 0),                     # Body Battery Drain
+            act.get('minTemperature', 0),                            # Min Temp
+            act.get('maxTemperature', 0),                            # Max Temp
+            round(act.get('movingDuration', 0) / 60, 2),             # Moving Time
+            round(act.get('elapsedDuration', 0) / 60, 2),            # Elapsed Time
+            round(act.get('minElevation', 0), 1),                    # Min Elevation
+            round(act.get('maxElevation', 0), 1)                     # Max Elevation
+        ]
+        
+        sheet.append_row(row)
+        print(f"✅ Added: {date_str} - {act.get('activityName')}")
+        new_entries += 1
+
+    print(f"Done! Added {new_entries} entries.")
 
 if __name__ == "__main__":
     main()
