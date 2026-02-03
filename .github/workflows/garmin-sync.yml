@@ -28,4 +28,5 @@ jobs:
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
+          GARMIN_SESSION_BASE64: ${{ secrets.GARMIN_SESSION_BASE64 }}
         run: python sync_garmin.py
