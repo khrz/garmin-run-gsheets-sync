@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 
 def main():
-    print("Starting extended Garmin sync...")
+    print("Starting extended Garmin sync with auto-headers...")
     
     # Credentials laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
@@ -34,33 +34,55 @@ def main():
             print(f"⚠️ Session failed: {e}")
 
     if not garmin or not garmin.garth.profile:
+        print("Attempting standard login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
-    # Aktivitäten holen
+    # Aktivitäten holen (letzte 20)
     activities = garmin.get_activities(0, 20)
     
     # Google Sheets Verbindung
     creds_dict = json.loads(google_creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
+    creds = Credentials.from_service_account_info(
+        creds_dict, 
+        scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    )
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheet_id).sheet1
 
-    # Vorhandene Daten prüfen
+    # Vorhandene Daten abrufen
     existing_data = sheet.get_all_values()
-    existing_dates = {row[0] for row in existing_data if row}
+    
+    # Kopfzeilen definieren
+    headers = [
+        "Date", "Activity Type", "Title", "Distance (km)", "Calories", "Duration (min)", 
+        "Avg HR", "Max HR", "Aerobic TE", "Avg Run Cadence", "Max Run Cadence", 
+        "Avg Speed (km/h)", "Max Speed (km/h)", "Total Ascent", "Total Descent", 
+        "Avg Stride Length (m)", "Vertical Ratio / VO2", "Avg Vertical Oscillation", 
+        "Avg GCT", "Avg GAP", "Avg Power", "Max Power", "Steps", 
+        "Body Battery Drain", "Min Temp", "Max Temp", "Moving Time", 
+        "Elapsed Time", "Min Elevation", "Max Elevation"
+    ]
+
+    # Falls das Sheet leer ist: Header einfügen
+    if not existing_data:
+        sheet.insert_row(headers, 1)
+        print("✅ Header-Zeile wurde neu erstellt.")
+        existing_dates = set()
+    else:
+        # Bestehende Startzeiten sammeln, um Duplikate zu vermeiden
+        existing_dates = {row[0] for row in existing_data if row}
 
     new_entries = 0
-    for act in activities:
-        # Datum extrahieren (als ID zur Vermeidung von Duplikaten)
-        date_str = act.get('startTimeLocal', '')[:10]
-        full_start_time = act.get('startTimeLocal', '') # Für präzisere Unterscheidung bei 2 Trainings am Tag
+    # Wir drehen die Liste um (reversed), damit der älteste Lauf zuerst hinzugefügt wird
+    for act in reversed(activities):
+        full_start_time = act.get('startTimeLocal', '')
         
-        # Check ob Eintrag schon existiert (Datum + Startzeit wäre idealer, hier bleibe ich beim Datum)
-        if full_start_time in existing_dates or date_str in existing_dates:
+        # Check ob Eintrag schon existiert
+        if full_start_time in existing_dates:
             continue
 
-        # Daten-Extraktion (Mapping der Garmin API Keys auf deine Liste)
+        # Daten-Extraktion
         row = [
             full_start_time,                                         # Date
             act.get('activityType', {}).get('typeKey', ''),          # Type
@@ -78,7 +100,7 @@ def main():
             round(act.get('elevationGain', 0), 1),                   # Total Ascent
             round(act.get('elevationLoss', 0), 1),                   # Total Descent
             round(act.get('avgStrideLength', 0) / 100, 2),           # Avg Stride Length (m)
-            act.get('vO2MaxValue', 0),                               # Platzhalter für Vertical Ratio/VO2
+            act.get('vO2MaxValue', 0),                               # Platzhalter
             act.get('avgVerticalOscillation', 0),                    # Avg Vertical Oscillation
             act.get('avgGroundContactTime', 0),                      # Avg GCT
             act.get('avgGradeAdjustedSpeed', 0),                     # Avg GAP
@@ -95,10 +117,10 @@ def main():
         ]
         
         sheet.append_row(row)
-        print(f"✅ Added: {date_str} - {act.get('activityName')}")
+        print(f"✅ Added: {full_start_time} - {act.get('activityName')}")
         new_entries += 1
 
-    print(f"Done! Added {new_entries} entries.")
+    print(f"Fertig! {new_entries} neue Einträge hinzugefügt.")
 
 if __name__ == "__main__":
     main()
