@@ -33,10 +33,11 @@ def main():
             print(f"⚠️ Session failed: {e}")
 
     if not garmin or not garmin.garth.profile:
+        print("Attempting standard login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
-    # Aktivitäten holen (letzte 30, um sicherzugehen)
+    # Aktivitäten holen (letzte 30)
     activities = garmin.get_activities(0, 30)
     
     # --- GOOGLE SHEETS ---
@@ -44,9 +45,11 @@ def main():
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheet_id).sheet1
+    
+    # Sicherer Abruf der Daten
     all_rows = sheet.get_all_values()
     
-    # Erweiterte Kopfzeilen basierend auf deinem CSV-Wunsch
+    # Kopfzeilen definieren
     headers = [
         "Date", "Activity Type", "Title", "Distance (km)", "Calories", "Duration (min)", 
         "Avg HR", "Max HR", "Aerobic TE", "Avg Cadence", "Max Cadence", 
@@ -57,20 +60,25 @@ def main():
         "Moving Time", "Elapsed Time", "Min Elevation", "Max Elevation"
     ]
 
-    if not all_rows or all_rows[0][0] != "Date":
+    # Fehler-Fix: Prüfen ob Liste leer ist, BEVOR auf Index [0] zugegriffen wird
+    header_exists = False
+    if len(all_rows) > 0 and len(all_rows[0]) > 0:
+        if all_rows[0][0] == "Date":
+            header_exists = True
+
+    if not header_exists:
+        print("Header missing or sheet empty. Inserting headers...")
         sheet.insert_row(headers, 1)
         all_rows = sheet.get_all_values()
     
     existing_dates = {row[0] for row in all_rows if row}
 
     new_entries = 0
-    # Alle Aktivitäten verarbeiten (Kein Filter mehr auf 'running'!)
     for act in reversed(activities):
         full_start_time = act.get('startTimeLocal', '')
         if full_start_time in existing_dates:
             continue
 
-        # Mapping der Garmin API Werte (viele Felder sind optional je nach Sportart)
         row = [
             full_start_time,
             act.get('activityType', {}).get('typeKey', ''),
@@ -81,8 +89,8 @@ def main():
             act.get('averageHR', 0),
             act.get('maxHR', 0),
             act.get('aerobicTrainingEffect', 0),
-            act.get('averageRunningCadenceInStepsPerMinute', act.get('averageBikeCadence', 0)), # Kombiniert Run/Bike
-            act.get('maxRunningCadenceInStepsPerMinute', act.get('maxBikeCadence', 0)),
+            act.get('averageRunningCadenceInStepsPerMinute', act.get('averageBikeCadence', 0)) or 0,
+            act.get('maxRunningCadenceInStepsPerMinute', act.get('maxBikeCadence', 0)) or 0,
             round(act.get('averageSpeed', 0) * 3.6, 2),
             round(act.get('maxSpeed', 0) * 3.6, 2),
             round(act.get('elevationGain', 0), 1),
