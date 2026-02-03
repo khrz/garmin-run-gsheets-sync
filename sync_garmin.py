@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 
 def main():
-    print("Starting ALL-Activity Garmin sync...")
+    print("Starting Final Garmin sync with polished formatting...")
     
     # Credentials laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
@@ -33,11 +33,10 @@ def main():
             print(f"⚠️ Session failed: {e}")
 
     if not garmin or not garmin.garth.profile:
-        print("Attempting standard login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
-    # Aktivitäten holen (letzte 30)
+    # Aktivitäten holen
     activities = garmin.get_activities(0, 30)
     
     # --- GOOGLE SHEETS ---
@@ -45,29 +44,20 @@ def main():
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheet_id).sheet1
-    
-    # Sicherer Abruf der Daten
     all_rows = sheet.get_all_values()
     
-    # Kopfzeilen definieren
     headers = [
         "Date", "Activity Type", "Title", "Distance (km)", "Calories", "Duration (min)", 
         "Avg HR", "Max HR", "Aerobic TE", "Avg Cadence", "Max Cadence", 
         "Avg Speed (km/h)", "Max Speed (km/h)", "Total Ascent", "Total Descent", 
-        "Avg Stride Length", "Avg GCT Balance", "Avg GAP", "Avg Power", "Max Power", 
-        "Training Stress Score", "Steps", "Total Reps", "Total Poses", 
-        "Body Battery Drain", "Min Temp", "Max Temp", "Avg Resp", "Min Resp", "Max Resp",
-        "Moving Time", "Elapsed Time", "Min Elevation", "Max Elevation"
+        "Avg Stride Length (m)", "Avg GCT Balance", "Avg GCT (ms)", "Avg Vert. Osc. (cm)", 
+        "Avg GAP", "Avg Power", "Max Power", "Training Stress Score", "Steps", 
+        "Total Reps", "Total Poses", "Body Battery Drain", "Min Temp", "Max Temp", 
+        "Avg Resp", "Moving Time", "Elapsed Time", "Min Elevation", "Max Elevation"
     ]
 
-    # Fehler-Fix: Prüfen ob Liste leer ist, BEVOR auf Index [0] zugegriffen wird
-    header_exists = False
-    if len(all_rows) > 0 and len(all_rows[0]) > 0:
-        if all_rows[0][0] == "Date":
-            header_exists = True
-
+    header_exists = len(all_rows) > 0 and all_rows[0][0] == "Date"
     if not header_exists:
-        print("Header missing or sheet empty. Inserting headers...")
         sheet.insert_row(headers, 1)
         all_rows = sheet.get_all_values()
     
@@ -78,6 +68,15 @@ def main():
         full_start_time = act.get('startTimeLocal', '')
         if full_start_time in existing_dates:
             continue
+
+        # GCT Balance Formatierung (Rundung auf 1 Nachkommastelle)
+        gct_raw = act.get('avgGroundContactBalance', 0)
+        if gct_raw and 0 < gct_raw < 100:
+            left = round(gct_raw, 1)
+            right = round(100 - gct_raw, 1)
+            gct_display = f"{left}% L / {right}% R"
+        else:
+            gct_display = "-"
 
         row = [
             full_start_time,
@@ -95,8 +94,10 @@ def main():
             round(act.get('maxSpeed', 0) * 3.6, 2),
             round(act.get('elevationGain', 0), 1),
             round(act.get('elevationLoss', 0), 1),
-            act.get('avgStrideLength', 0),
-            act.get('avgGroundContactBalance', 0),
+            round(act.get('avgStrideLength', 0) / 100, 2) if act.get('avgStrideLength') else 0,
+            gct_display,
+            round(act.get('avgGroundContactTime', 0), 0),
+            round(act.get('avgVerticalOscillation', 0), 1),
             act.get('avgGradeAdjustedSpeed', 0),
             act.get('avgPower', 0),
             act.get('maxPower', 0),
@@ -108,8 +109,6 @@ def main():
             act.get('minTemperature', 0),
             act.get('maxTemperature', 0),
             act.get('averageRespirationRate', 0),
-            act.get('minRespirationRate', 0),
-            act.get('maxRespirationRate', 0),
             round(act.get('movingDuration', 0) / 60, 2),
             round(act.get('elapsedDuration', 0) / 60, 2),
             round(act.get('minElevation', 0), 1),
