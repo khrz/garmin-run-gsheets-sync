@@ -9,16 +9,16 @@ from google.oauth2.service_account import Credentials
 import gspread
 
 def main():
-    print("Starting extended Garmin sync with auto-headers...")
+    print("Starting extended Garmin sync with robust auto-headers...")
     
-    # Credentials laden
+    # Credentials aus GitHub Secrets laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
     garmin_password = os.environ.get('GARMIN_PASSWORD')
     google_creds_json = os.environ.get('GOOGLE_CREDENTIALS')
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
     
-    # Garmin Login (Session-Logik)
+    # --- GARMIN LOGIN ---
     print("Connecting to Garmin...")
     garmin = None
     if session_base64:
@@ -41,7 +41,7 @@ def main():
     # Aktivitäten holen (letzte 20)
     activities = garmin.get_activities(0, 20)
     
-    # Google Sheets Verbindung
+    # --- GOOGLE SHEETS VERBINDUNG ---
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(
         creds_dict, 
@@ -50,10 +50,10 @@ def main():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(sheet_id).sheet1
 
-   # Alle Daten abrufen
+    # Daten abrufen für Header-Check und Duplikate
     all_rows = sheet.get_all_values()
     
-    # Kopfzeilen definieren
+    # Kopfzeilen definieren (Exakt passend zum row-Array unten)
     headers = [
         "Date", "Activity Type", "Title", "Distance (km)", "Calories", "Duration (min)", 
         "Avg HR", "Max HR", "Aerobic TE", "Avg Run Cadence", "Max Run Cadence", 
@@ -64,26 +64,25 @@ def main():
         "Elapsed Time", "Min Elevation", "Max Elevation"
     ]
 
-    # Prüfen, ob die erste Zeile die Header enthält
-    if not all_rows or all_rows[0][0] != "Date":
-        print("Header nicht gefunden oder Sheet leer. Erstelle Header...")
+    # Prüfung: Ist das Sheet leer oder fehlt die Kopfzeile?
+    if not all_rows or (len(all_rows) > 0 and all_rows[0][0] != "Date"):
+        print("Header missing or sheet empty. Inserting headers...")
         sheet.insert_row(headers, 1)
-        # Wir laden die Daten neu, damit die Indizes für die Duplikatprüfung stimmen
-        all_rows = sheet.get_all_values()
+        all_rows = sheet.get_all_values() # Daten neu laden nach Header-Einfügung
     
-    # Bestehende Startzeiten sammeln (Spalte 1), um Duplikate zu vermeiden
+    # Bestehende Startzeiten sammeln, um Duplikate zu vermeiden
     existing_dates = {row[0] for row in all_rows if row}
 
     new_entries = 0
-    # Wir drehen die Liste um (reversed), damit der älteste Lauf zuerst hinzugefügt wird
+    # Aktivitäten chronologisch hinzufügen (älteste zuerst)
     for act in reversed(activities):
         full_start_time = act.get('startTimeLocal', '')
         
-        # Check ob Eintrag schon existiert
+        # Duplikat-Check
         if full_start_time in existing_dates:
             continue
 
-        # Daten-Extraktion
+        # Daten-Mapping (API Keys zu Spalten)
         row = [
             full_start_time,                                         # Date
             act.get('activityType', {}).get('typeKey', ''),          # Type
@@ -121,7 +120,7 @@ def main():
         print(f"✅ Added: {full_start_time} - {act.get('activityName')}")
         new_entries += 1
 
-    print(f"Fertig! {new_entries} neue Einträge hinzugefügt.")
+    print(f"Done! Added {new_entries} new entries.")
 
 if __name__ == "__main__":
     main()
