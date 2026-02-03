@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 
 def main():
-    print("Starting Final Garmin sync with polished formatting...")
+    print("Starting Final Garmin sync with fixed index logic...")
     
     # Credentials laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
@@ -56,12 +56,19 @@ def main():
         "Avg Resp", "Moving Time", "Elapsed Time", "Min Elevation", "Max Elevation"
     ]
 
-    header_exists = len(all_rows) > 0 and all_rows[0][0] == "Date"
+    # Robuste Header-Prüfung
+    header_exists = False
+    if all_rows and len(all_rows) > 0:
+        if len(all_rows[0]) > 0:
+            if all_rows[0][0] == "Date":
+                header_exists = True
+
     if not header_exists:
+        print("Header missing or sheet empty. Inserting headers...")
         sheet.insert_row(headers, 1)
         all_rows = sheet.get_all_values()
     
-    existing_dates = {row[0] for row in all_rows if row}
+    existing_dates = {row[0] for row in all_rows if row and len(row) > 0}
 
     new_entries = 0
     for act in reversed(activities):
@@ -69,7 +76,7 @@ def main():
         if full_start_time in existing_dates:
             continue
 
-        # GCT Balance Formatierung (Rundung auf 1 Nachkommastelle)
+        # GCT Balance Formatierung
         gct_raw = act.get('avgGroundContactBalance', 0)
         if gct_raw and 0 < gct_raw < 100:
             left = round(gct_raw, 1)
@@ -96,8 +103,8 @@ def main():
             round(act.get('elevationLoss', 0), 1),
             round(act.get('avgStrideLength', 0) / 100, 2) if act.get('avgStrideLength') else 0,
             gct_display,
-            round(act.get('avgGroundContactTime', 0), 0),
-            round(act.get('avgVerticalOscillation', 0), 1),
+            round(act.get('avgGroundContactTime', 0), 0) if act.get('avgGroundContactTime') else 0,
+            round(act.get('avgVerticalOscillation', 0), 1) if act.get('avgVerticalOscillation') else 0,
             act.get('avgGradeAdjustedSpeed', 0),
             act.get('avgPower', 0),
             act.get('maxPower', 0),
