@@ -12,7 +12,7 @@ import gspread
 def main():
     print("🚀 Skript gestartet: Verbinde mit Garmin...")
     
-    # Credentials laden
+    # Credentials aus GitHub Secrets laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
     garmin_password = os.environ.get('GARMIN_PASSWORD')
     google_creds_json = os.environ.get('GOOGLE_CREDENTIALS')
@@ -63,18 +63,3 @@ def main():
                 continue
 
             if " " in full_start_time:
-                date_part, time_part = full_start_time.split(" ")
-            else:
-                date_part, time_part = full_start_time, ""
-
-            gct_raw = act.get('avgGroundContactBalance', 0)
-            gct_display = f"{round(gct_raw, 1)}% L / {round(100 - gct_raw, 1)}% R" if gct_raw and 0 < gct_raw < 100 else "-"
-
-            workout_row = [
-                date_part, time_part,
-                act.get('activityType', {}).get('typeKey', ''),
-                act.get('activityName', ''),
-                round(act.get('distance', 0) / 1000, 2),
-                act.get('calories', 0),
-                round(act.get('duration', 0) / 60, 2),
-                act.get('averageHR', 0
