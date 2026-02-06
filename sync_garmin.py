@@ -12,7 +12,7 @@ import gspread
 def main():
     print("🚀 Skript gestartet: Verbinde mit Garmin...")
     
-    # Credentials aus GitHub Secrets laden
+    # Credentials laden
     garmin_email = os.environ.get('GARMIN_EMAIL')
     garmin_password = os.environ.get('GARMIN_PASSWORD')
     google_creds_json = os.environ.get('GOOGLE_CREDENTIALS')
@@ -63,3 +63,83 @@ def main():
                 continue
 
             if " " in full_start_time:
+                date_part, time_part = full_start_time.split(" ")
+            else:
+                date_part, time_part = full_start_time, ""
+
+            gct_raw = act.get('avgGroundContactBalance', 0)
+            gct_display = f"{round(gct_raw, 1)}% L / {round(100 - gct_raw, 1)}% R" if gct_raw and 0 < gct_raw < 100 else "-"
+
+            workout_row = [
+                date_part, time_part,
+                act.get('activityType', {}).get('typeKey', ''),
+                act.get('activityName', ''),
+                round(act.get('distance', 0) / 1000, 2),
+                act.get('calories', 0),
+                round(act.get('duration', 0) / 60, 2),
+                act.get('averageHR', 0), act.get('maxHR', 0),
+                act.get('aerobicTrainingEffect', 0),
+                act.get('averageRunningCadenceInStepsPerMinute', act.get('averageBikeCadence', 0)) or 0,
+                act.get('maxRunningCadenceInStepsPerMinute', act.get('maxBikeCadence', 0)) or 0,
+                round(act.get('averageSpeed', 0) * 3.6, 2),
+                round(act.get('maxSpeed', 0) * 3.6, 2),
+                round(act.get('elevationGain', 0), 1), round(act.get('elevationLoss', 0), 1),
+                round(act.get('avgStrideLength', 0) / 100, 2) if act.get('avgStrideLength') else 0,
+                gct_display,
+                round(act.get('avgGroundContactTime', 0), 0) if act.get('avgGroundContactTime') else 0,
+                round(act.get('avgVerticalOscillation', 0), 1) if act.get('avgVerticalOscillation') else 0,
+                act.get('avgGradeAdjustedSpeed', 0), act.get('avgPower', 0), act.get('maxPower', 0),
+                act.get('trainingStressScore', 0), act.get('steps', 0),
+                act.get('totalReps', 0), act.get('totalPoses', 0),
+                act.get('bodyBatteryDrainValue', 0), act.get('minTemperature', 0), act.get('maxTemperature', 0),
+                act.get('averageRespirationRate', 0),
+                round(act.get('movingDuration', 0) / 60, 2), round(act.get('elapsedDuration', 0) / 60, 2),
+                round(act.get('minElevation', 0), 1), round(act.get('maxElevation', 0), 1)
+            ]
+            
+            workout_sheet.append_row(workout_row)
+            print(f"✅ Workout hinzugefügt: {date_part} - {act.get('activityName')}")
+            new_workouts += 1
+    except Exception as e:
+        print(f"❌ Fehler bei Workouts: {e}")
+
+    # --- TEIL 2: HEALTH DATA ---
+    print("🩺 Synchronisiere Health-Daten (letzte 3 Tage)...")
+    try:
+        health_sheet = spreadsheet.worksheet("health_data")
+        
+        for i in range(3):
+            date_obj = datetime.now() - timedelta(days=i)
+            date_str = date_obj.strftime("%Y-%m-%d")
+            
+            try:
+                stats = garmin.get_stats(date_str)
+                sleep = garmin.get_sleep_data(date_str)
+                rhr_data = garmin.get_rhr_and_hrv_data(date_str)
+                
+                health_row = [
+                    date_str,
+                    sleep.get('dailySleepDTO', {}).get('sleepScore', '-'),
+                    rhr_data.get('hrvSummary', {}).get('lastNightAvg', '-'),
+                    rhr_data.get('restingHeartRate', '-'),
+                    stats.get('bodyBatteryMostRecentValue', '-'),
+                    stats.get('averageStressLevel', '-'),
+                    stats.get('steps', 0)
+                ]
+                
+                try:
+                    cell = health_sheet.find(date_str)
+                    health_sheet.update(f"A{cell.row}:G{cell.row}", [health_row])
+                    print(f"🔄 Health Update: {date_str}")
+                except gspread.exceptions.CellNotFound:
+                    health_sheet.append_row(health_row)
+                    print(f"✅ Health Neu: {date_str}")
+            except Exception as e:
+                print(f"⚠️ Detail-Fehler Health {date_str}: {e}")
+    except Exception as e:
+        print(f"❌ Fehler bei Health-Tab Zugriff: {e}")
+
+    print("🏁 Fertig!")
+
+if __name__ == "__main__":
+    main()
