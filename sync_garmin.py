@@ -48,7 +48,7 @@ def main():
         scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     )
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(sheet_id).sheet1
+    sheet = client.open_by_key(sheet_id).worksheet("workout_database")
     all_rows = sheet.get_all_values()
     
     headers = [
