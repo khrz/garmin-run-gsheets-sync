@@ -10,29 +10,25 @@ from google.oauth2.service_account import Credentials
 import gspread
 
 # --- HILFSFUNKTION: Rekursive Suche (Deep Search) ---
-def find_deep_score(data):
+def find_value_by_key(data, target_key):
+    """Sucht rekursiv nach einem Key in verschachtelten Strukturen"""
     if not data: return None
-    # Bekannte Pfade zuerst
-    try:
-        val = data.get('dailySleepDTO', {}).get('sleepScores', {}).get('overall', {}).get('value')
-        if val: return val
-    except: pass
-    try:
-        val = data.get('dailySleepDTO', {}).get('sleepScore')
-        if val: return val
-    except: pass
-    return search_key_recursive(data, 'sleepScore')
-
-def search_key_recursive(d, key):
-    if isinstance(d, dict):
-        for k, v in d.items():
-            if k == key and v is not None: return v
-            found = search_key_recursive(v, key)
+    
+    # Direkte Suche
+    if isinstance(data, dict):
+        if target_key in data and data[target_key] is not None:
+            return data[target_key]
+        
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                found = find_value_by_key(v, target_key)
+                if found: return found
+                
+    elif isinstance(data, list):
+        for item in data:
+            found = find_value_by_key(item, target_key)
             if found: return found
-    elif isinstance(d, list):
-        for item in d:
-            found = search_key_recursive(item, key)
-            if found: return found
+            
     return None
 
 def main():
@@ -108,7 +104,7 @@ def main():
                 print(f"✅ Workout: {d}")
     except Exception as e: print(f"❌ Workout-Fehler: {e}")
 
-    # --- TEIL 2: HEALTH DATABASE (VO2max & Load) ---
+    # --- TEIL 2: HEALTH DATABASE (DEEP SEARCH VO2 & LOAD) ---
     print("🩺 Synchronisiere Health-Datenbank...")
     try:
         health_sheet = spreadsheet.worksheet("health_data")
@@ -120,34 +116,41 @@ def main():
             date_str = date_obj.strftime("%Y-%m-%d")
             
             try:
-                # 1. Basis-Stats & Sleep Data
+                # 1. Datenquellen laden
                 stats = garmin.get_user_summary(date_str)
                 sleep_data = garmin.get_sleep_data(date_str)
+                train_status = None
+                try:
+                    train_status = garmin.get_training_status(date_str)
+                except: pass
+
+                # 2. VO2max Suche (Priorität: Running > Cycling > Generic)
+                vo2_max = stats.get('vo2MaxRunning')
+                if not vo2_max: vo2_max = stats.get('vo2MaxCycling')
+                if not vo2_max: vo2_max = stats.get('vo2Max') # Generisch
+                if not vo2_max and train_status:
+                    vo2_max = find_value_by_key(train_status, 'vo2Max') # Deep Search in TrainingStatus
                 
-                # Schlafdauer & Score
+                if not vo2_max: vo2_max = "-"
+
+                # 3. ACUTE LOAD Suche (Priorität: acuteLoad > loadCombined > 7DayLoad)
+                acute_load = "-"
+                if train_status:
+                    acute_load = train_status.get('acuteLoad')
+                    if not acute_load: acute_load = train_status.get('loadCombined')
+                    if not acute_load: acute_load = find_value_by_key(train_status, 'acuteLoad')
+                    if not acute_load: acute_load = find_value_by_key(train_status, 'chronicLoad') # Fallback
+
+                # 4. Sleep & Score
+                sleep_score = find_value_by_key(sleep_data, 'sleepScore')
+                if not sleep_score: sleep_score = find_value_by_key(stats, 'sleepScore')
+                if not sleep_score: sleep_score = "-"
+                
                 dto = sleep_data.get('dailySleepDTO', {})
                 seconds = dto.get('sleepTimeSeconds', 0)
                 sleep_duration = round(seconds / 3600, 2) if seconds > 0 else "-"
-                sleep_score = find_deep_score(sleep_data)
-                if not sleep_score: sleep_score = find_deep_score(stats)
-                if not sleep_score: sleep_score = "-"
 
-                # 2. VO2max & Training Load
-                vo2_max = "-"
-                acute_load = "-"
-                try:
-                    # VO2max steckt oft in den User Stats
-                    vo2_max = stats.get('vo2MaxRunning')
-                    if not vo2_max: vo2_max = stats.get('vo2MaxCycling')
-                    
-                    # Training Status für Acute Load abrufen
-                    train_status = garmin.get_training_status(date_str)
-                    if train_status:
-                        acute_load = train_status.get('acuteLoad')
-                        if not acute_load: acute_load = train_status.get('loadCombined')
-                except: pass
-
-                # 3. HRV & Rest
+                # 5. HRV & Rest
                 hrv_avg = "-"
                 try:
                     hrv_info = garmin.get_hrv_data(date_str)
@@ -161,13 +164,14 @@ def main():
 
                 health_row = [date_str, sleep_score, sleep_duration, hrv_avg, rhr, bb_max, stress, steps, vo2_max, acute_load]
                 
+                # Update oder Neu
                 if date_str in date_map:
                     row_idx = date_map[date_str]
                     health_sheet.update(f"A{row_idx}:J{row_idx}", [health_row])
-                    print(f"📊 {date_str}: Sleep {sleep_score}, Load {acute_load}")
+                    print(f"📊 {date_str}: Sleep {sleep_score}, VO2 {vo2_max}, Load {acute_load}")
                 else:
                     health_sheet.append_row(health_row)
-                    print(f"📊 {date_str}: Neu angelegt")
+                    print(f"📊 {date_str}: Neu angelegt (VO2: {vo2_max}, Load: {acute_load})")
                     
             except Exception as e:
                 print(f"⚠️ Fehler am {date_str}: {e}")
