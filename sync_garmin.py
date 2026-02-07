@@ -9,6 +9,41 @@ from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
 import gspread
 
+# --- HILFSFUNKTION: Rekursive Suche ---
+def find_deep_score(data):
+    """Sucht rekursiv nach einem SleepScore in verschachtelten Strukturen"""
+    if not data:
+        return None
+        
+    # 1. Bekannte Pfade zuerst prüfen (Effizienz)
+    # Struktur B (Neuere Uhren)
+    try:
+        val = data.get('dailySleepDTO', {}).get('sleepScores', {}).get('overall', {}).get('value')
+        if val: return val
+    except: pass
+
+    # Struktur A (Ältere API)
+    try:
+        val = data.get('dailySleepDTO', {}).get('sleepScore')
+        if val: return val
+    except: pass
+    
+    # 2. Brute-Force Suche nach Key "sleepScore"
+    return search_key_recursive(data, 'sleepScore')
+
+def search_key_recursive(d, key):
+    if isinstance(d, dict):
+        for k, v in d.items():
+            if k == key and v is not None:
+                return v
+            found = search_key_recursive(v, key)
+            if found: return found
+    elif isinstance(d, list):
+        for item in d:
+            found = search_key_recursive(item, key)
+            if found: return found
+    return None
+
 def main():
     print("🚀 Skript gestartet...")
     
@@ -48,37 +83,42 @@ def main():
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(sheet_id)
 
-    # --- TEIL 1: WORKOUTS (Kurzversion) ---
+    # --- TEIL 1: WORKOUTS ---
     print("🏃 Synchronisiere Workouts...")
     try:
         workout_sheet = spreadsheet.worksheet("workout_database")
         all_rows = workout_sheet.get_all_values()
         existing_workouts = {f"{row[0]} {row[1]}" for row in all_rows if len(row) > 1}
-        activities = garmin.get_activities(0, 10)
+        
+        activities = garmin.get_activities(0, 10) # Nur letzte 10 für Performance
+        
         for act in reversed(activities):
             start = act.get('startTimeLocal', '')
             if start not in existing_workouts:
                 d, t = start.split(" ") if " " in start else (start, "")
                 gct_raw = act.get('avgGroundContactBalance', 0)
                 gct = f"{round(gct_raw, 1)}% L / {round(100 - gct_raw, 1)}% R" if 0 < gct_raw < 100 else "-"
-                row = [d, t, act.get('activityType', {}).get('typeKey', ''), act.get('activityName', ''),
-                       round(act.get('distance', 0)/1000, 2), act.get('calories', 0), round(act.get('duration', 0)/60, 2),
-                       act.get('averageHR', 0), act.get('maxHR', 0), act.get('aerobicTrainingEffect', 0),
-                       act.get('averageRunningCadenceInStepsPerMinute', 0), act.get('maxRunningCadenceInStepsPerMinute', 0),
-                       round(act.get('averageSpeed', 0)*3.6, 2), round(act.get('maxSpeed', 0)*3.6, 2),
-                       act.get('elevationGain', 0), act.get('elevationLoss', 0), round(act.get('avgStrideLength', 0)/100, 2),
-                       gct, round(act.get('avgGroundContactTime', 0), 0), round(act.get('avgVerticalOscillation', 0), 1),
-                       act.get('avgGradeAdjustedSpeed', 0), act.get('avgPower', 0), act.get('maxPower', 0),
-                       act.get('trainingStressScore', 0), act.get('steps', 0), act.get('totalReps', 0), act.get('totalPoses', 0),
-                       act.get('bodyBatteryDrainValue', 0), act.get('minTemperature', 0), act.get('maxTemperature', 0),
-                       act.get('averageRespirationRate', 0), round(act.get('movingDuration', 0)/60, 2),
-                       round(act.get('elapsedDuration', 0)/60, 2), act.get('minElevation', 0), act.get('maxElevation', 0)]
+                
+                row = [
+                    d, t, act.get('activityType', {}).get('typeKey', ''), act.get('activityName', ''),
+                    round(act.get('distance', 0)/1000, 2), act.get('calories', 0), round(act.get('duration', 0)/60, 2),
+                    act.get('averageHR', 0), act.get('maxHR', 0), act.get('aerobicTrainingEffect', 0),
+                    act.get('averageRunningCadenceInStepsPerMinute', 0), act.get('maxRunningCadenceInStepsPerMinute', 0),
+                    round(act.get('averageSpeed', 0)*3.6, 2), round(act.get('maxSpeed', 0)*3.6, 2),
+                    act.get('elevationGain', 0), act.get('elevationLoss', 0), round(act.get('avgStrideLength', 0)/100, 2),
+                    gct, round(act.get('avgGroundContactTime', 0), 0), round(act.get('avgVerticalOscillation', 0), 1),
+                    act.get('avgGradeAdjustedSpeed', 0), act.get('avgPower', 0), act.get('maxPower', 0),
+                    act.get('trainingStressScore', 0), act.get('steps', 0), act.get('totalReps', 0), act.get('totalPoses', 0),
+                    act.get('bodyBatteryDrainValue', 0), act.get('minTemperature', 0), act.get('maxTemperature', 0),
+                    act.get('averageRespirationRate', 0), round(act.get('movingDuration', 0)/60, 2),
+                    round(act.get('elapsedDuration', 0)/60, 2), act.get('minElevation', 0), act.get('maxElevation', 0)
+                ]
                 workout_sheet.append_row(row)
-                print(f"✅ Workout: {d}")
+                print(f"✅ Workout hinzugefügt: {d}")
     except Exception as e: print(f"❌ Workout-Fehler: {e}")
 
-    # --- TEIL 2: HEALTH DATABASE (FOKUS SLEEP SCORE) ---
-    print("🩺 Synchronisiere Health-Datenbank...")
+    # --- TEIL 2: HEALTH DATABASE (DEEP SEARCH) ---
+    print("🩺 Synchronisiere Health-Datenbank (Deep Search)...")
     try:
         health_sheet = spreadsheet.worksheet("health_data")
         health_values = health_sheet.get_all_values()
@@ -89,30 +129,25 @@ def main():
             date_str = date_obj.strftime("%Y-%m-%d")
             
             try:
-                # Hole zwei verschiedene Datenquellen
+                # 1. Daten abrufen
                 stats = garmin.get_user_summary(date_str)
                 sleep_data = garmin.get_sleep_data(date_str)
                 
-                # 1. Schlafdauer (Funktioniert bereits)
+                # 2. Schlafdauer berechnen
                 dto = sleep_data.get('dailySleepDTO', {})
                 seconds = dto.get('sleepTimeSeconds', 0)
                 sleep_duration = round(seconds / 3600, 2) if seconds > 0 else "-"
 
-                # 2. SLEEP SCORE SUCHE (Die "Fahndung")
-                potential_scores = [
-                    dto.get('sleepScore'),            # Standard
-                    sleep_data.get('sleepScore'),      # Alternative Ebene 1
-                    stats.get('sleepScore'),           # In der Tageszusammenfassung
-                    stats.get('dailySleepDTO', {}).get('sleepScore') # Verschachtelt in Summary
-                ]
+                # 3. SLEEP SCORE (Deep Search)
+                sleep_score = find_deep_score(sleep_data)
                 
-                sleep_score = "-"
-                for s in potential_scores:
-                    if s is not None and str(s) != "0" and str(s) != "-":
-                        sleep_score = s
-                        break
+                # Fallback: Wenn in SleepData nicht gefunden, suche in Stats
+                if not sleep_score:
+                    sleep_score = find_deep_score(stats)
+                
+                if not sleep_score: sleep_score = "-"
 
-                # 3. HRV & RHR
+                # 4. HRV & RHR
                 hrv_avg = "-"
                 try:
                     hrv_info = garmin.get_hrv_data(date_str)
@@ -127,10 +162,13 @@ def main():
                 health_row = [date_str, sleep_score, sleep_duration, hrv_avg, rhr, bb_max, stress, steps]
                 
                 if date_str in date_map:
-                    health_sheet.update(f"A{date_map[date_str]}:H{date_map[date_str]}", [health_row])
-                    print(f"📊 {date_str}: Score {sleep_score}, Dur {sleep_duration}h, HRV {hrv_avg}")
+                    row_idx = date_map[date_str]
+                    health_sheet.update(f"A{row_idx}:H{row_idx}", [health_row])
+                    print(f"📊 {date_str}: Score {sleep_score}, Dur {sleep_duration}h")
                 else:
                     health_sheet.append_row(health_row)
+                    print(f"📊 {date_str}: Neu angelegt")
+                    
             except Exception as e:
                 print(f"⚠️ Fehler am {date_str}: {e}")
     except Exception as e:
