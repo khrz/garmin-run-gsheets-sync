@@ -9,7 +9,7 @@ from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
 import gspread
 
-# --- HILFSFUNKTION: Rekursive Suche ---
+# --- HILFSFUNKTION: Rekursive Suche nach Keys ---
 def find_value_by_key(data, target_key):
     if not data: return None
     if isinstance(data, dict):
@@ -24,6 +24,24 @@ def find_value_by_key(data, target_key):
             found = find_value_by_key(item, target_key)
             if found: return found
     return None
+
+# --- HILFSFUNKTION: Spezifische Sleep-Score Suche ---
+def get_sleep_score_explicit(data):
+    if not data: return None
+    # 1. Struktur B (Fenix 7 / Epix / Forerunner neu)
+    try:
+        val = data.get('dailySleepDTO', {}).get('sleepScores', {}).get('overall', {}).get('value')
+        if val: return val
+    except: pass
+    
+    # 2. Struktur A (Ältere API)
+    try:
+        val = data.get('dailySleepDTO', {}).get('sleepScore')
+        if val: return val
+    except: pass
+    
+    # 3. Fallback: Suche nach Key "sleepScore" überall
+    return find_value_by_key(data, 'sleepScore')
 
 def main():
     print("🚀 Skript gestartet...")
@@ -76,7 +94,7 @@ def main():
             start = act.get('startTimeLocal', '')
             date_part = start.split(" ")[0] if " " in start else start
             
-            # VO2max aus Aktivität (sehr genau)
+            # VO2max aus Aktivität retten
             if 'vo2MaxValue' in act and act['vo2MaxValue']:
                 activity_vo2_map[date_part] = round(act['vo2MaxValue'])
             
@@ -118,45 +136,40 @@ def main():
                 stats = garmin.get_user_summary(date_str)
                 sleep_data = garmin.get_sleep_data(date_str)
                 
-                # --- LOAD & VO2MAX SPEZIAL-LOGIK ---
+                # Training Status holen
                 train_status = None
-                try: 
-                    train_status = garmin.get_training_status(date_str)
+                try: train_status = garmin.get_training_status(date_str)
                 except: pass
 
-                # 1. ACUTE LOAD (Präzise Suche nach 'dailyTrainingLoadAcute')
+                # 1. ACUTE LOAD (Funktioniert!)
                 acute_load = "-"
                 if train_status:
-                    # Wir suchen tief im JSON nach 'dailyTrainingLoadAcute'
                     val = find_value_by_key(train_status, 'dailyTrainingLoadAcute')
                     if val: acute_load = round(val)
-                    
-                    # Fallback: Falls 'dailyTrainingLoadAcute' fehlt, suche nach 'acuteLoad'
                     if acute_load == "-":
                         val = find_value_by_key(train_status, 'acuteLoad')
                         if val: acute_load = round(val)
 
-                # 2. VO2MAX (Running > Cycling > Generic > Activity)
+                # 2. VO2MAX
                 vo2_max = "-"
-                
-                # A) Suche im TrainingStatus (Generic/Precise)
+                # A) TrainingStatus
                 if train_status:
-                    # Im Log gesehen: mostRecentVO2Max -> generic -> vo2MaxValue
-                    v_generic = train_status.get('mostRecentVO2Max', {}).get('generic', {}).get('vo2MaxValue')
-                    if v_generic: vo2_max = round(v_generic)
-                
-                # B) Suche in Daily Stats
+                    v = train_status.get('mostRecentVO2Max', {}).get('generic', {}).get('vo2MaxValue')
+                    if v: vo2_max = round(v)
+                # B) Daily Stats
                 if vo2_max == "-":
-                    v_run = stats.get('vo2MaxRunning')
-                    if v_run: vo2_max = round(v_run)
-                
-                # C) Fallback auf Activity Map
+                    v = stats.get('vo2MaxRunning')
+                    if v: vo2_max = round(v)
+                # C) Activity Fallback
                 if vo2_max == "-" and date_str in activity_vo2_map:
                     vo2_max = activity_vo2_map[date_str]
 
-                # 3. SLEEP SCORE (Deep Search)
-                sleep_score = find_value_by_key(sleep_data, 'sleepScore')
-                if not sleep_score: sleep_score = find_value_by_key(stats, 'sleepScore')
+                # 3. SLEEP SCORE (Restored & Robust)
+                # Zuerst explizit im Sleep-Objekt suchen
+                sleep_score = get_sleep_score_explicit(sleep_data)
+                # Fallback: Im Stats-Objekt suchen (manchmal ist er nur dort)
+                if not sleep_score: 
+                    sleep_score = get_sleep_score_explicit(stats)
                 if not sleep_score: sleep_score = "-"
                 
                 dto = sleep_data.get('dailySleepDTO', {})
@@ -180,10 +193,10 @@ def main():
                 if date_str in date_map:
                     row_idx = date_map[date_str]
                     health_sheet.update(f"A{row_idx}:J{row_idx}", [health_row])
-                    print(f"📊 {date_str}: Load {acute_load}, VO2 {vo2_max}")
+                    print(f"📊 {date_str}: Sleep {sleep_score}, Load {acute_load}, VO2 {vo2_max}")
                 else:
                     health_sheet.append_row(health_row)
-                    print(f"📊 {date_str}: Neu (Load {acute_load})")
+                    print(f"📊 {date_str}: Neu (Sleep {sleep_score})")
                     
             except Exception as e:
                 print(f"⚠️ Fehler am {date_str}: {e}")
