@@ -37,7 +37,7 @@ def main():
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
-    # FIX: User-ID laden
+    # User-ID initialisieren (Fix für 403 Fehler)
     print("Validiere Benutzerprofil...")
     try:
         full_name = garmin.get_full_name()
@@ -97,4 +97,72 @@ def main():
                 round(act.get('avgVerticalOscillation', 0), 1) if act.get('avgVerticalOscillation') else 0,
                 act.get('avgGradeAdjustedSpeed', 0), act.get('avgPower', 0), act.get('maxPower', 0),
                 act.get('trainingStressScore', 0), act.get('steps', 0),
-                act.get
+                act.get('totalReps', 0), act.get('totalPoses', 0),
+                act.get('bodyBatteryDrainValue', 0), act.get('minTemperature', 0), act.get('maxTemperature', 0),
+                act.get('averageRespirationRate', 0),
+                round(act.get('movingDuration', 0) / 60, 2), round(act.get('elapsedDuration', 0) / 60, 2),
+                round(act.get('minElevation', 0), 1), round(act.get('maxElevation', 0), 1)
+            ]
+            
+            workout_sheet.append_row(workout_row)
+            print(f"Workout hinzugefügt: {date_part}")
+            new_workouts += 1
+    except Exception as e:
+        print(f"Fehler bei Workouts: {e}")
+
+    # --- TEIL 2: HEALTH DATA ---
+    print("Synchronisiere Health-Daten...")
+    try:
+        health_sheet = spreadsheet.worksheet("health_data")
+        health_values = health_sheet.get_all_values()
+        date_map = {row[0]: i + 1 for i, row in enumerate(health_values) if row}
+        
+        for i in range(3):
+            date_obj = datetime.now() - timedelta(days=i)
+            date_str = date_obj.strftime("%Y-%m-%d")
+            print(f"Verarbeite Health für: {date_str}")
+            
+            try:
+                stats = garmin.get_user_summary(date_str)
+                
+                try:
+                    sleep = garmin.get_sleep_data(date_str)
+                    sleep_score = sleep.get('dailySleepDTO', {}).get('sleepScore', '-')
+                except:
+                    sleep_score = "-"
+                
+                try:
+                    rhr_data = garmin.get_rhr_and_hrv_data(date_str)
+                    hrv_avg = rhr_data.get('hrvSummary', {}).get('lastNightAvg', '-')
+                    rhr = rhr_data.get('restingHeartRate', '-')
+                except:
+                    hrv_avg = "-"
+                    rhr = "-"
+
+                health_row = [
+                    date_str,
+                    sleep_score,
+                    hrv_avg,
+                    rhr,
+                    stats.get('bodyBatteryMostRecentValue', '-'),
+                    stats.get('averageStressLevel', '-'),
+                    stats.get('steps', 0)
+                ]
+                
+                if date_str in date_map:
+                    row_idx = date_map[date_str]
+                    health_sheet.update(f"A{row_idx}:G{row_idx}", [health_row])
+                    print(f"Update Health: {date_str}")
+                else:
+                    health_sheet.append_row(health_row)
+                    print(f"Neu Health: {date_str}")
+                    
+            except Exception as e:
+                print(f"Keine Health-Daten fuer {date_str}: {e}")
+    except Exception as e:
+        print(f"Fehler bei Health-Tab: {e}")
+
+    print("Skript beendet")
+
+if __name__ == "__main__":
+    main()
