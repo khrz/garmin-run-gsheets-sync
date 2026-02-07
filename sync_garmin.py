@@ -61,23 +61,22 @@ def main():
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(sheet_id)
 
-    # --- TEIL 1: WORKOUTS & VO2MAX EXTRAKTION ---
-    print("🏃 Synchronisiere Workouts & sammle VO2max...")
-    activity_vo2_map = {} # Speichert VO2max pro Datum
+    # --- TEIL 1: WORKOUTS & VO2MAX ACTIVITY SCAN ---
+    print("🏃 Synchronisiere Workouts...")
+    activity_vo2_map = {}
     
     try:
         workout_sheet = spreadsheet.worksheet("workout_database")
         all_rows = workout_sheet.get_all_values()
         existing_workouts = {f"{row[0]} {row[1]}" for row in all_rows if len(row) > 1}
         
-        # Hole mehr Aktivitäten, um sicher VO2max Werte zu finden
         activities = garmin.get_activities(0, 20)
         
         for act in reversed(activities):
             start = act.get('startTimeLocal', '')
             date_part = start.split(" ")[0] if " " in start else start
             
-            # VO2max aus Aktivität retten (falls vorhanden)
+            # VO2max aus Aktivität (sehr genau)
             if 'vo2MaxValue' in act and act['vo2MaxValue']:
                 activity_vo2_map[date_part] = round(act['vo2MaxValue'])
             
@@ -119,39 +118,43 @@ def main():
                 stats = garmin.get_user_summary(date_str)
                 sleep_data = garmin.get_sleep_data(date_str)
                 
-                # Training Status (mit Debugging)
+                # --- LOAD & VO2MAX SPEZIAL-LOGIK ---
                 train_status = None
-                try:
+                try: 
                     train_status = garmin.get_training_status(date_str)
-                    # DEBUG: Nur für heute Log ausgeben, um Load-Key zu finden
-                    if i == 0: 
-                        print(f"🔎 DEBUG STATUS für {date_str}: {train_status}")
                 except: pass
 
-                # 1. ACUTE LOAD SUCHE
+                # 1. ACUTE LOAD (Präzise Suche nach 'dailyTrainingLoadAcute')
                 acute_load = "-"
                 if train_status:
-                    # Liste der üblichen Verdächtigen für Load
-                    keys_to_check = ['acuteLoad', 'loadCombined', 'chronicLoad', 'shortTermLoad', 'trainingLoad']
-                    for k in keys_to_check:
-                        val = find_value_by_key(train_status, k)
-                        if val: 
-                            acute_load = round(val)
-                            break
+                    # Wir suchen tief im JSON nach 'dailyTrainingLoadAcute'
+                    val = find_value_by_key(train_status, 'dailyTrainingLoadAcute')
+                    if val: acute_load = round(val)
+                    
+                    # Fallback: Falls 'dailyTrainingLoadAcute' fehlt, suche nach 'acuteLoad'
+                    if acute_load == "-":
+                        val = find_value_by_key(train_status, 'acuteLoad')
+                        if val: acute_load = round(val)
 
-                # 2. VO2max (Priorität: Aktivität > Summary)
-                vo2_max = activity_vo2_map.get(date_str) # Aus Workouts
-                if not vo2_max:
-                    vo2_max = stats.get('vo2MaxRunning')
-                if not vo2_max:
-                    vo2_max = stats.get('vo2MaxCycling')
-                if not vo2_max and train_status:
-                    vo2_max = find_value_by_key(train_status, 'vo2Max')
+                # 2. VO2MAX (Running > Cycling > Generic > Activity)
+                vo2_max = "-"
                 
-                if not vo2_max: vo2_max = "-"
-                else: vo2_max = round(float(vo2_max))
+                # A) Suche im TrainingStatus (Generic/Precise)
+                if train_status:
+                    # Im Log gesehen: mostRecentVO2Max -> generic -> vo2MaxValue
+                    v_generic = train_status.get('mostRecentVO2Max', {}).get('generic', {}).get('vo2MaxValue')
+                    if v_generic: vo2_max = round(v_generic)
+                
+                # B) Suche in Daily Stats
+                if vo2_max == "-":
+                    v_run = stats.get('vo2MaxRunning')
+                    if v_run: vo2_max = round(v_run)
+                
+                # C) Fallback auf Activity Map
+                if vo2_max == "-" and date_str in activity_vo2_map:
+                    vo2_max = activity_vo2_map[date_str]
 
-                # 3. Sleep & Score
+                # 3. SLEEP SCORE (Deep Search)
                 sleep_score = find_value_by_key(sleep_data, 'sleepScore')
                 if not sleep_score: sleep_score = find_value_by_key(stats, 'sleepScore')
                 if not sleep_score: sleep_score = "-"
@@ -180,7 +183,7 @@ def main():
                     print(f"📊 {date_str}: Load {acute_load}, VO2 {vo2_max}")
                 else:
                     health_sheet.append_row(health_row)
-                    print(f"📊 {date_str}: Neu (Load {acute_load}, VO2 {vo2_max})")
+                    print(f"📊 {date_str}: Neu (Load {acute_load})")
                     
             except Exception as e:
                 print(f"⚠️ Fehler am {date_str}: {e}")
