@@ -28,22 +28,19 @@ def main():
             garth.resume('session_data')
             garmin = Garmin()
             garmin.garth = garth.client
-            print("Login via Session erfolgreich")
+            # FORCE PROFILE RELOAD
+            garmin.display_name = garmin.garth.profile.get("displayName")
+            print(f"Login via Session erfolgreich: {garmin.display_name}")
         except Exception as e:
             print(f"Session failed: {e}")
 
-    if not garmin or not garmin.garth.profile:
+    if not garmin or not garmin.display_name:
         print("Nutze Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
+        garmin.display_name = garmin.get_display_name()
 
-    # User-ID initialisieren (Fix für 403 Fehler)
-    print("Validiere Benutzerprofil...")
-    try:
-        full_name = garmin.get_full_name()
-        print(f"Angemeldet als: {full_name}")
-    except Exception as e:
-        print(f"Profil-Check fehlgeschlagen: {e}")
+    print(f"Aktiv angemeldet als: {garmin.display_name}")
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
@@ -123,7 +120,8 @@ def main():
             print(f"Verarbeite Health für: {date_str}")
             
             try:
-                stats = garmin.get_user_summary(date_str)
+                # Stats mit explizitem User-Context
+                stats = garmin.get_stats(date_str)
                 
                 try:
                     sleep = garmin.get_sleep_data(date_str)
@@ -158,7 +156,7 @@ def main():
                     print(f"Neu Health: {date_str}")
                     
             except Exception as e:
-                print(f"Keine Health-Daten fuer {date_str}: {e}")
+                print(f"Fehler am {date_str}: {e}")
     except Exception as e:
         print(f"Fehler bei Health-Tab: {e}")
 
