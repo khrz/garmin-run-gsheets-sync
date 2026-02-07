@@ -38,13 +38,14 @@ def main():
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
-    # CRITICAL FIX: Profil laden, um die User-ID für Health-Anfragen zu registrieren
-    print("👤 Lade Benutzerprofil zur Identifikation...")
+    # --- FIX: USER-ID INITIALISIEREN ---
+    print("👤 Validiere Benutzerprofil...")
     try:
-        garmin.display_name = garmin.get_display_name()
-        print(f"✅ Angemeldet als: {garmin.display_name}")
+        # get_full_name() triggert das Laden der Profil-Daten inklusive User-ID
+        full_name = garmin.get_full_name()
+        print(f"✅ Angemeldet als: {full_name}")
     except Exception as e:
-        print(f"⚠️ Profil-Check fehlgeschlagen (kann 403 verursachen): {e}")
+        print(f"⚠️ Profil-Check fehlgeschlagen: {e}")
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
@@ -115,7 +116,6 @@ def main():
     print("🩺 Synchronisiere Health-Daten (letzte 3 Tage)...")
     try:
         health_sheet = spreadsheet.worksheet("health_data")
-        # Alle vorhandenen Daten laden für Duplikat-Check
         health_values = health_sheet.get_all_values()
         date_map = {row[0]: i + 1 for i, row in enumerate(health_values) if row}
         
@@ -125,10 +125,9 @@ def main():
             print(f"🔍 Verarbeite Health für: {date_str}")
             
             try:
-                # User Summary abrufen (Schritte, Body Battery, Stress)
+                # get_user_summary ist die stabilste Methode für Daily Stats
                 stats = garmin.get_user_summary(date_str)
                 
-                # Schlaf- und HRV-Daten abrufen (können fehlschlagen, wenn noch nicht berechnet)
                 try:
                     sleep = garmin.get_sleep_data(date_str)
                     sleep_score = sleep.get('dailySleepDTO', {}).get('sleepScore', '-')
@@ -162,11 +161,8 @@ def main():
                     print(f"✅ Health Neu: {date_str}")
                     
             except Exception as e:
-                print(f"⚠️ Keine Health-Daten für {date_str} verfügbar (API 403 oder keine Daten).")
+                print(f"⚠️ Keine Health-Daten für {date_str} verfügbar: {e}")
     except Exception as e:
         print(f"❌ Fehler bei Health-Tab Zugriff: {e}")
 
-    print("🏁 Fertig!")
-
-if __name__ == "__main__":
-    main()
+    print("🏁
