@@ -110,7 +110,7 @@ def main():
         health_values = health_sheet.get_all_values()
         date_map = {row[0]: i + 1 for i, row in enumerate(health_values) if row}
         
-        for i in range(7):
+        for i in range(30):
             date_obj = datetime.now() - timedelta(days=i)
             date_str = date_obj.strftime("%Y-%m-%d")
             
