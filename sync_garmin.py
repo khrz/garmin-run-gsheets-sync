@@ -9,33 +9,24 @@ from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
 import gspread
 
-# --- HILFSFUNKTION: Rekursive Suche ---
+# --- HILFSFUNKTION: Rekursive Suche (Deep Search) ---
 def find_deep_score(data):
-    """Sucht rekursiv nach einem SleepScore in verschachtelten Strukturen"""
-    if not data:
-        return None
-        
-    # 1. Bekannte Pfade zuerst prüfen (Effizienz)
-    # Struktur B (Neuere Uhren)
+    if not data: return None
+    # Bekannte Pfade zuerst
     try:
         val = data.get('dailySleepDTO', {}).get('sleepScores', {}).get('overall', {}).get('value')
         if val: return val
     except: pass
-
-    # Struktur A (Ältere API)
     try:
         val = data.get('dailySleepDTO', {}).get('sleepScore')
         if val: return val
     except: pass
-    
-    # 2. Brute-Force Suche nach Key "sleepScore"
     return search_key_recursive(data, 'sleepScore')
 
 def search_key_recursive(d, key):
     if isinstance(d, dict):
         for k, v in d.items():
-            if k == key and v is not None:
-                return v
+            if k == key and v is not None: return v
             found = search_key_recursive(v, key)
             if found: return found
     elif isinstance(d, list):
@@ -90,7 +81,7 @@ def main():
         all_rows = workout_sheet.get_all_values()
         existing_workouts = {f"{row[0]} {row[1]}" for row in all_rows if len(row) > 1}
         
-        activities = garmin.get_activities(0, 10) # Nur letzte 10 für Performance
+        activities = garmin.get_activities(0, 10)
         
         for act in reversed(activities):
             start = act.get('startTimeLocal', '')
@@ -114,11 +105,11 @@ def main():
                     round(act.get('elapsedDuration', 0)/60, 2), act.get('minElevation', 0), act.get('maxElevation', 0)
                 ]
                 workout_sheet.append_row(row)
-                print(f"✅ Workout hinzugefügt: {d}")
+                print(f"✅ Workout: {d}")
     except Exception as e: print(f"❌ Workout-Fehler: {e}")
 
-    # --- TEIL 2: HEALTH DATABASE (DEEP SEARCH) ---
-    print("🩺 Synchronisiere Health-Datenbank (Deep Search)...")
+    # --- TEIL 2: HEALTH DATABASE (VO2max & Load) ---
+    print("🩺 Synchronisiere Health-Datenbank...")
     try:
         health_sheet = spreadsheet.worksheet("health_data")
         health_values = health_sheet.get_all_values()
@@ -129,25 +120,34 @@ def main():
             date_str = date_obj.strftime("%Y-%m-%d")
             
             try:
-                # 1. Daten abrufen
+                # 1. Basis-Stats & Sleep Data
                 stats = garmin.get_user_summary(date_str)
                 sleep_data = garmin.get_sleep_data(date_str)
                 
-                # 2. Schlafdauer berechnen
+                # Schlafdauer & Score
                 dto = sleep_data.get('dailySleepDTO', {})
                 seconds = dto.get('sleepTimeSeconds', 0)
                 sleep_duration = round(seconds / 3600, 2) if seconds > 0 else "-"
-
-                # 3. SLEEP SCORE (Deep Search)
                 sleep_score = find_deep_score(sleep_data)
-                
-                # Fallback: Wenn in SleepData nicht gefunden, suche in Stats
-                if not sleep_score:
-                    sleep_score = find_deep_score(stats)
-                
+                if not sleep_score: sleep_score = find_deep_score(stats)
                 if not sleep_score: sleep_score = "-"
 
-                # 4. HRV & RHR
+                # 2. VO2max & Training Load
+                vo2_max = "-"
+                acute_load = "-"
+                try:
+                    # VO2max steckt oft in den User Stats
+                    vo2_max = stats.get('vo2MaxRunning')
+                    if not vo2_max: vo2_max = stats.get('vo2MaxCycling')
+                    
+                    # Training Status für Acute Load abrufen
+                    train_status = garmin.get_training_status(date_str)
+                    if train_status:
+                        acute_load = train_status.get('acuteLoad')
+                        if not acute_load: acute_load = train_status.get('loadCombined')
+                except: pass
+
+                # 3. HRV & Rest
                 hrv_avg = "-"
                 try:
                     hrv_info = garmin.get_hrv_data(date_str)
@@ -159,12 +159,12 @@ def main():
                 stress = stats.get('averageStressLevel', "-")
                 steps = stats.get('totalSteps', stats.get('steps', 0))
 
-                health_row = [date_str, sleep_score, sleep_duration, hrv_avg, rhr, bb_max, stress, steps]
+                health_row = [date_str, sleep_score, sleep_duration, hrv_avg, rhr, bb_max, stress, steps, vo2_max, acute_load]
                 
                 if date_str in date_map:
                     row_idx = date_map[date_str]
-                    health_sheet.update(f"A{row_idx}:H{row_idx}", [health_row])
-                    print(f"📊 {date_str}: Score {sleep_score}, Dur {sleep_duration}h")
+                    health_sheet.update(f"A{row_idx}:J{row_idx}", [health_row])
+                    print(f"📊 {date_str}: Sleep {sleep_score}, Load {acute_load}")
                 else:
                     health_sheet.append_row(health_row)
                     print(f"📊 {date_str}: Neu angelegt")
