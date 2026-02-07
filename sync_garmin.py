@@ -57,7 +57,7 @@ def main():
         date_map = {row[0]: i + 1 for i, row in enumerate(health_values) if row}
         
         # ÄNDERE DIESE ZAHL FÜR DEN BACKFILL (z.B. 30 für den ersten Run, danach wieder 7)
-        DAYS_TO_FETCH = 30 
+        DAYS_TO_FETCH = 7 
         
         for i in range(DAYS_TO_FETCH):
             date_obj = datetime.now() - timedelta(days=i)
