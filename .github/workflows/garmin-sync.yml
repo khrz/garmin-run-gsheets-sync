@@ -37,4 +37,5 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
           GARMIN_SESSION_BASE64: ${{ secrets.GARMIN_SESSION_BASE64 }}
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
         run: python sync_garmin.py
