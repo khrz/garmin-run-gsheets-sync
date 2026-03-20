@@ -59,22 +59,25 @@ def main():
     if session_base64:
         try:
             print("Versuche Login mit Base64 Session...")
-            # 1. Base64 decodieren und an garth übergeben
+            
+            # 1. Base64 reparieren (Leerzeichen entfernen & fehlende '=' anhängen)
+            session_base64 = session_base64.strip()
+            session_base64 += "=" * ((4 - len(session_base64) % 4) % 4)
+            
+            # 2. Decodieren und an garth übergeben
             decoded_session = base64.b64decode(session_base64).decode("utf-8")
             garth.client.loads(decoded_session)
             
-            # 2. Garmin-Client initialisieren
             garmin = Garmin(garmin_email, garmin_password)
             garmin.login()
         except Exception as e:
-            print(f"⚠️ Session failed, fallback to password. Error: {e}")
+            print(f"⚠️ Session failed. Error: {e}")
             garmin = None
 
     # Fallback: Wenn keine Session da ist oder sie nicht funktioniert hat
     if not garmin or not getattr(garmin, "display_name", None):
         try:
             print("Starte frischen Login mit E-Mail und Passwort...")
-            # Vor dem Neuversuch internen Cache hart zurücksetzen
             garth.client.sess.cookies.clear()
             
             for path in [os.path.expanduser("~/.garth"), "./.garth"]:
@@ -89,6 +92,7 @@ def main():
         except Exception as e:
             print(f"❌ Kompletter Login-Fehlschlag: {e}")
             raise
+   
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
