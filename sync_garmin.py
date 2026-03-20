@@ -62,14 +62,16 @@ def main():
             print("Versuche Login mit Token-Secret...")
             garmin = Garmin(garmin_email, garmin_password)
             
-            # 1. Base64 sicher entpacken, falls der String wie Base64 aussieht
-            if garmin_tokens.startswith("W3"):
-                garmin_tokens = garmin_tokens.strip()
-                garmin_tokens += "=" * ((4 - len(garmin_tokens) % 4) % 4) # Padding fixen
-                import base64
-                garmin_tokens = base64.b64decode(garmin_tokens).decode("utf-8")
-                
-            # 2. Den reinen JSON-String DIREKT in die Instanz laden
+            # 1. String rigoros bereinigen (entfernt unsichtbare Copy-Paste-Fehler wie 0xa1)
+            import re
+            garmin_tokens = re.sub(r'[^A-Za-z0-9+/=]', '', garmin_tokens)
+            
+            # 2. Padding fixen und decodieren
+            garmin_tokens += "=" * ((4 - len(garmin_tokens) % 4) % 4)
+            import base64
+            garmin_tokens = base64.b64decode(garmin_tokens).decode("utf-8")
+            
+            # 3. In die Instanz laden
             garmin.garth.loads(garmin_tokens)
             garmin.login()
             garmin.display_name = garmin.get_display_name()
@@ -91,6 +93,7 @@ def main():
         garmin.login()
         garmin.display_name = garmin.get_display_name()
         print(f"✅ Login via Password: {garmin.display_name}")
+         
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
