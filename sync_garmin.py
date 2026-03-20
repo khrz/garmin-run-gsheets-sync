@@ -4,6 +4,7 @@ import base64
 import zipfile
 import io
 import garth
+import shutil
 from datetime import datetime, timedelta
 from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
@@ -62,9 +63,6 @@ def main():
             garmin.login()
         except Exception as e:
             print(f"⚠️ Session failed, fallback to password. Error: {e}")
-            import garth
-            import shutil
-            import os
             
             # Cache hart löschen
             garth.client.sess.cookies.clear()
