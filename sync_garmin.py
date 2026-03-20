@@ -59,9 +59,10 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte schlanken Token-Login...")
+            print("🚀 Starte Token-Login...")
             import binascii, re
             
+            # Hex säubern
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
@@ -72,21 +73,23 @@ def main():
                 garmin = Garmin(garmin_email, garmin_password)
                 garmin.garth.loads(raw_session)
                 
-                # Setze den Namen manuell für die Health-URLs
-                # Das verhindert den 403 / None Fehler
-                garmin.display_name = garmin.garth.username
+                # DER ENTSCHEIDENDE FIX:
+                # Wir holen uns den Namen aus dem Profil. 
+                # Falls 'userName' (der slug) existiert, nehmen wir den, sonst displayName.
+                profile = garmin.garth.profile
+                garmin.display_name = profile.get('userName') or profile.get('displayName') or garmin.garth.username
                 
-                print(f"✅ Token geladen für: {garmin.display_name}")
+                print(f"✅ Session geladen für: {garmin.display_name}")
             else:
-                print("⚠️ Hex-Code war leer.")
+                print("⚠️ Hex-Code leer.")
 
         except Exception as e:
-            print(f"⚠️ Token-Login fehlgeschlagen: {e}")
+            print(f"⚠️ Token-Fehler: {e}")
             garmin = None
 
-    # Fallback NUR wenn gar kein garmin-Objekt existiert
+    # Fallback (Sicherheitsnetz)
     if not garmin or not garmin.garth.username:
-        print("Fallback: Standard-Login...")
+        print("Fallback: Passwort-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
