@@ -53,40 +53,40 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
     
-
-# --- GARMIN LOGIN ---
+    # --- GARMIN LOGIN ---
     garmin = None
+    
     if session_base64:
         try:
             print("Versuche Login mit Base64 Session...")
-            garmin = Garmin(garmin_email, garmin_password)
+            garmin = Garmin(email=garmin_email, password=garmin_password, session_data=session_base64)
             garmin.login()
         except Exception as e:
             print(f"⚠️ Session failed, fallback to password. Error: {e}")
-            
-            # Cache hart löschen
+            garmin = None
+
+    # Fallback: Wenn keine Session da ist oder sie nicht funktioniert hat
+    if not garmin or not getattr(garmin, "display_name", None):
+        try:
+            print("Starte frischen Login mit E-Mail und Passwort...")
+            # Vor dem Neuversuch internen Cache hart zurücksetzen
+            garth.client.username = None
             garth.client.sess.cookies.clear()
+            
             for path in [os.path.expanduser("~/.garth"), "./.garth"]:
                 if os.path.exists(path):
-                    try:
-                        shutil.rmtree(path)
-                    except:
-                        pass
-                        
-            # Frischer Neuversuch
-            print("Starte frischen Login ohne Session...")
+                    try: shutil.rmtree(path)
+                    except: pass
+            
             garmin = Garmin(garmin_email, garmin_password)
             garmin.login()
-
-    # Falls gar keine Session vorhanden war, oder der obige Block fehlgeschlagen ist
-    if not garmin or not garmin.display_name:
-        garmin = Garmin(garmin_email, garmin_password)
-        garmin.login()
-        garmin.display_name = garmin.get_display_name()
-        print(f"✅ Login via Password: {garmin.display_name}")
+            garmin.display_name = garmin.get_display_name()
+            print(f"✅ Login via Password: {garmin.display_name}")
+        except Exception as e:
+            print(f"❌ Kompletter Login-Fehlschlag: {e}")
+            raise
 
     # --- GOOGLE SHEETS SETUP ---
-
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
     client = gspread.authorize(creds)
@@ -154,7 +154,7 @@ def main():
                 try: train_status = garmin.get_training_status(date_str)
                 except: pass
 
-                # 1. ACUTE LOAD (Funktioniert!)
+                # 1. ACUTE LOAD
                 acute_load = "-"
                 if train_status:
                     val = find_value_by_key(train_status, 'dailyTrainingLoadAcute')
@@ -165,22 +165,17 @@ def main():
 
                 # 2. VO2MAX
                 vo2_max = "-"
-                # A) TrainingStatus
                 if train_status:
                     v = train_status.get('mostRecentVO2Max', {}).get('generic', {}).get('vo2MaxValue')
                     if v: vo2_max = round(v)
-                # B) Daily Stats
                 if vo2_max == "-":
                     v = stats.get('vo2MaxRunning')
                     if v: vo2_max = round(v)
-                # C) Activity Fallback
                 if vo2_max == "-" and date_str in activity_vo2_map:
                     vo2_max = activity_vo2_map[date_str]
 
-                # 3. SLEEP SCORE (Restored & Robust)
-                # Zuerst explizit im Sleep-Objekt suchen
+                # 3. SLEEP SCORE
                 sleep_score = get_sleep_score_explicit(sleep_data)
-                # Fallback: Im Stats-Objekt suchen (manchmal ist er nur dort)
                 if not sleep_score: 
                     sleep_score = get_sleep_score_explicit(stats)
                 if not sleep_score: sleep_score = "-"
