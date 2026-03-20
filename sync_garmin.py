@@ -71,23 +71,20 @@ def main():
             raw_session = raw_session.strip('"\'')
             
             if raw_session:
-                # 2. Garmin Instanz erstellen
+                # 1. Garmin Instanz erstellen
                 garmin = Garmin(garmin_email, garmin_password)
                 
-                # 3. Session laden
+                # 2. Session in den garth-Client laden
                 garmin.garth.loads(raw_session)
                 
-                # --- DER 403-FIX: Benutzername manuell setzen ---
-                garmin.display_name = garmin.garth.username
-                # -----------------------------------------------
-                
-                # Prüfen ob Login steht
-                if not garmin.garth.username:
-                    garmin.login()
+                # 3. DER FIX: Wir rufen login() IMMER auf.
+                # Da die Session geladen ist, wird garth kein MFA verlangen,
+                # sondern nur die internen Pfade für Health/UserSummary freischalten.
+                garmin.login()
                 
                 print(f"✅ Login erfolgreich für: {garmin.display_name}")
             else:
-                print("⚠️ Hex-Code war leer.")
+                print("⚠️ Fehler: Hex-Code war leer.")
 
         except Exception as e:
             print(f"⚠️ Token-Login im letzten Schritt gescheitert: {e}")
