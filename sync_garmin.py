@@ -62,23 +62,27 @@ def main():
             print("Prüfe Hex-Token...")
             import binascii, base64, re
             
-            # 1. Wir filtern ALLES raus, was keine Hex-Zahl ist (entfernt Leerzeichen/Enters)
+            # 1. Nur gültige Hex-Zeichen behalten
             hex_cleaned = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             
-            # 2. Hex zu Text (Base64-String)
-            # Dein Code hat 5568 Hex-Zeichen -> ergibt 2784 Base64-Zeichen
+            # 2. Hex zu Base64-Text umwandeln
             raw_session_text = binascii.unhexlify(hex_cleaned).decode('utf-8')
             
-            # 3. Base64-Text säubern
+            # 3. Base64-Reinigung
             b64_cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw_session_text)
             
-            # 4. JSON dekodieren und in Garmin laden
+            # --- DER FIX: Nur Vielfache von 4 zulassen ---
+            valid_len = (len(b64_cleaned) // 4) * 4
+            if len(b64_cleaned) > valid_len:
+                print(f"DEBUG: Schneide {len(b64_cleaned) - valid_len} überflüssige(s) Zeichen ab.")
+                b64_cleaned = b64_cleaned[:valid_len]
+            
+            # 4. JSON dekodieren
             decoded_json = base64.b64decode(b64_cleaned).decode("utf-8")
             
             garmin = Garmin(garmin_email, garmin_password)
             garmin.garth.loads(decoded_json)
             
-            # Prüfen, ob wir eingeloggt sind (vermeidet unnötigen Refresh)
             if not garmin.garth.username:
                 garmin.login()
                 
@@ -87,7 +91,7 @@ def main():
             print(f"⚠️ Login mit Hex-Token fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback (nur wenn Hex fehlschlägt)
+    # Fallback
     if not garmin:
         print("Fallback: Versuche Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
