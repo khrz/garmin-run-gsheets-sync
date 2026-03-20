@@ -4,12 +4,13 @@ on:
   schedule:
     # 04:00 UTC = 06:00 DE (Sommer) / 05:00 DE (Winter)
     # 05:00 UTC = 07:00 DE (Sommer) / 06:00 DE (Winter)
-    # 10:00 UTC = 12:00 DE (Sommer) / 11:00 DE (Winter)
+    # 09:00 UTC = 11:00 DE (Sommer) / 10:00 DE (Winter) <-- NEU für 11 Uhr
+    # 10:00 UTC = 12:00 DE (Sommer) / 11:00 DE (Winter) <-- Deckt 11 Uhr Winterzeit ab
     # 11:00 UTC = 13:00 DE (Sommer) / 12:00 DE (Winter)
     # 18:00 UTC = 20:00 DE (Sommer) / 19:00 DE (Winter)
     # 19:00 UTC = 21:00 DE (Sommer) / 20:00 DE (Winter)
     
-    - cron: '0 4,5,10,11,18,19 * * *'
+    - cron: '0 4,5,9,10,11,18,19 * * *'
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
@@ -18,16 +19,16 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install --upgrade --no-cache-dir -r requirements.txt
       
       - name: Run sync script
         env:
