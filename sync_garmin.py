@@ -61,7 +61,16 @@ def main():
         try:
             print("Versuche Login mit Token-Secret...")
             garmin = Garmin(garmin_email, garmin_password)
-            garth.client.loads(garmin_tokens)
+            
+            # 1. Base64 sicher entpacken, falls der String wie Base64 aussieht
+            if garmin_tokens.startswith("W3"):
+                garmin_tokens = garmin_tokens.strip()
+                garmin_tokens += "=" * ((4 - len(garmin_tokens) % 4) % 4) # Padding fixen
+                import base64
+                garmin_tokens = base64.b64decode(garmin_tokens).decode("utf-8")
+                
+            # 2. Den reinen JSON-String DIREKT in die Instanz laden
+            garmin.garth.loads(garmin_tokens)
             garmin.login()
             garmin.display_name = garmin.get_display_name()
             print(f"✅ Login via Token: {garmin.display_name}")
@@ -69,8 +78,15 @@ def main():
             print(f"⚠️ Token fehlgeschlagen: {e}")
             garmin = None
 
+    # Fallback
     if not garmin or not getattr(garmin, "display_name", None):
         print("Starte frischen Login mit E-Mail und Passwort...")
+        import shutil
+        for path in [os.path.expanduser("~/.garth"), "./.garth", "./.garth_cache"]:
+            if os.path.exists(path):
+                try: shutil.rmtree(path)
+                except: pass
+                
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
         garmin.display_name = garmin.get_display_name()
