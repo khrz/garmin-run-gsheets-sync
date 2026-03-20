@@ -62,37 +62,41 @@ def main():
             print("Versuche Login mit Token-Secret...")
             garmin = Garmin(garmin_email, garmin_password)
             
-            # 1. String rigoros bereinigen (entfernt unsichtbare Copy-Paste-Fehler wie 0xa1)
+            # 1. Rigorose Reinigung: Entfernt ALLES, was kein Base64 ist (verhindert 0xa1 Fehler)
             import re
-            garmin_tokens = re.sub(r'[^A-Za-z0-9+/=]', '', garmin_tokens)
+            clean_tokens = re.sub(r'[^A-Za-z0-9+/=]', '', garmin_tokens)
             
-            # 2. Padding fixen und decodieren
-            garmin_tokens += "=" * ((4 - len(garmin_tokens) % 4) % 4)
-            import base64
-            garmin_tokens = base64.b64decode(garmin_tokens).decode("utf-8")
+            # 2. Padding sicherstellen
+            clean_tokens += "=" * ((4 - len(clean_tokens) % 4) % 4)
             
-            # 3. In die Instanz laden
-            garmin.garth.loads(garmin_tokens)
+            # 3. Decodieren und in die Instanz laden
+            decoded_json = base64.b64decode(clean_tokens).decode("utf-8")
+            garmin.garth.loads(decoded_json)
+            
             garmin.login()
             garmin.display_name = garmin.get_display_name()
-            print(f"✅ Login via Token: {garmin.display_name}")
+            print(f"✅ Login via Token erfolgreich: {garmin.display_name}")
         except Exception as e:
-            print(f"⚠️ Token fehlgeschlagen: {e}")
+            print(f"⚠️ Token-Login fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback
+    # Fallback: Falls Token fehlt oder ungültig ist
     if not garmin or not getattr(garmin, "display_name", None):
         print("Starte frischen Login mit E-Mail und Passwort...")
-        import shutil
+        # Cache löschen für sauberen Neuversuch
         for path in [os.path.expanduser("~/.garth"), "./.garth", "./.garth_cache"]:
             if os.path.exists(path):
                 try: shutil.rmtree(path)
                 except: pass
                 
         garmin = Garmin(garmin_email, garmin_password)
-        garmin.login()
-        garmin.display_name = garmin.get_display_name()
-        print(f"✅ Login via Password: {garmin.display_name}")
+        try:
+            garmin.login()
+            garmin.display_name = garmin.get_display_name()
+            print(f"✅ Login via Password erfolgreich: {garmin.display_name}")
+        except Exception as e:
+            print(f"❌ Kompletter Login-Fehlschlag: {e}")
+            raise
          
 
     # --- GOOGLE SHEETS SETUP ---
