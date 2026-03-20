@@ -53,44 +53,49 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
 
-  # --- GARMIN LOGIN ---
+    # --- GARMIN LOGIN ---
     garmin_tokens_hex = os.environ.get('GARMIN_TOKENS')
     garmin = None
     
     if garmin_tokens_hex:
         try:
-            import binascii, base64, re
-            # 1. Nur echte Hex-Zeichen behalten
+            print("🚀 Starte Direct-JSON-Hex Login...")
+            import binascii, re
+            
+            # 1. Wir entfernen ALLES, was keine Hex-Zahl ist (Leerzeichen, Umbrüche, etc.)
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             
-            # 2. In Base64-Text umwandeln
-            b64_str = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore')
+            # 2. Falls die Länge ungerade ist, schneiden wir das letzte Zeichen ab
+            if len(h_clean) % 2 != 0:
+                h_clean = h_clean[:-1]
             
-            # 3. RADIKAL-REINIGUNG: Nur A-Z, 0-9, +, / behalten (kein =, kein \n)
-            b64_pure = re.sub(r'[^A-Za-z0-9+/]', '', b64_str)
+            # 3. Hex direkt zurück in JSON-Text verwandeln
+            json_text = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore')
             
-            # 4. Mathematische Korrektur auf Vielfaches von 4
-            # Das tötet den "2785" Fehler endgültig
-            valid_len = (len(b64_pure) // 4) * 4
-            b64_final = b64_pure[:valid_len]
-            
-            # 5. Padding manuell hinzufügen (sauberer Weg)
-            b64_final += "=" * ((4 - len(b64_final) % 4) % 4)
-            
-            # 6. Dekodieren und Laden
-            json_text = base64.b64decode(b64_final).decode('utf-8')
-            garmin = Garmin(garmin_email, garmin_password)
-            garmin.garth.loads(json_text)
-            
-            if not garmin.garth.username:
-                garmin.login()
-            print(f"✅ Login erfolgreich: {garmin.get_display_name()}")
+            # 4. JSON validieren: Muss mit [ anfangen und ] enden
+            start = json_text.find('[')
+            end = json_text.rfind(']')
+            if start != -1 and end != -1:
+                json_text = json_text[start:end+1]
+                
+                garmin = Garmin(garmin_email, garmin_password)
+                garmin.garth.loads(json_text)
+                
+                # Wir rufen login() nur auf, wenn kein aktiver Username da ist
+                if not garmin.garth.username:
+                    garmin.login()
+                    
+                print(f"✅ Login via Token-Hex erfolgreich: {garmin.get_display_name()}")
+            else:
+                print("⚠️ Fehler: Kein gültiges JSON-Format im Hex-Code gefunden.")
+
         except Exception as e:
             print(f"⚠️ Token-Login fehlgeschlagen: {e}")
             garmin = None
 
+    # Fallback
     if not garmin:
-        print("Fallback auf Passwort-Login...")
+        print("Fallback: Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
 
