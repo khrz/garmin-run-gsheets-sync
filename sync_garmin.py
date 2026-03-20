@@ -64,8 +64,22 @@ def main():
             garmin.garth = garth.client
             garmin.display_name = garmin.garth.profile.get("displayName")
             print(f"✅ Login via Session: {garmin.display_name}")
-        except Exception:
-            print("⚠️ Session failed, fallback to password")
+       except Exception as e:
+        print("⚠️ Session failed, fallback to password")
+        
+        # --- DER FIX: Speicher komplett sprengen vor dem Neu-Versuch ---
+        import garth
+        import shutil
+        import os
+        garth.client.sess.cookies.clear()
+        for path in [os.path.expanduser("~/.garth"), "./.garth"]:
+            if os.path.exists(path):
+                shutil.rmtree(path)
+        # ---------------------------------------------------------------
+        
+        # Jetzt frischer Neuversuch
+        garmin = Garmin(email, password)
+        garmin.login()
 
     if not garmin or not garmin.display_name:
         garmin = Garmin(garmin_email, garmin_password)
