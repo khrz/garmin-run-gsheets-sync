@@ -59,42 +59,40 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("Versuche Login mit Hex-verschlüsseltem Token...")
-            import binascii
-            import base64
+            print("Prüfe Hex-Token...")
+            import binascii, base64, re
             
-            # 1. Hex-String säubern (Leerzeichen entfernen) und in Text umwandeln
-            hex_cleaned = "".join(garmin_tokens_hex.split())
-            base64_text = binascii.unhexlify(hex_cleaned).decode('utf-8')
+            # 1. Wir filtern ALLES raus, was keine Hex-Zahl ist (entfernt Leerzeichen/Enters)
+            hex_cleaned = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             
-            # 2. Den Base64-Text (W3si...) in echtes JSON umwandeln
-            # Wir säubern hier auch nochmal vorsorglich auf Base64-Ebene
-            import re
-            base64_cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', base64_text)
-            decoded_json = base64.b64decode(base64_cleaned).decode("utf-8")
+            # 2. Hex zu Text (Base64-String)
+            # Dein Code hat 5568 Hex-Zeichen -> ergibt 2784 Base64-Zeichen
+            raw_session_text = binascii.unhexlify(hex_cleaned).decode('utf-8')
             
-            # 3. Garmin-Instanz vorbereiten und laden
+            # 3. Base64-Text säubern
+            b64_cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw_session_text)
+            
+            # 4. JSON dekodieren und in Garmin laden
+            decoded_json = base64.b64decode(b64_cleaned).decode("utf-8")
+            
             garmin = Garmin(garmin_email, garmin_password)
             garmin.garth.loads(decoded_json)
             
-            garmin.login()
-            garmin.display_name = garmin.get_display_name()
-            print(f"✅ Login via Hex-Token erfolgreich: {garmin.display_name}")
+            # Prüfen, ob wir eingeloggt sind (vermeidet unnötigen Refresh)
+            if not garmin.garth.username:
+                garmin.login()
+                
+            print(f"✅ Login erfolgreich: {garmin.get_display_name()}")
         except Exception as e:
-            print(f"⚠️ Hex-Login fehlgeschlagen: {e}")
+            print(f"⚠️ Login mit Hex-Token fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback (Sicherheitsebene)
-    if not garmin or not getattr(garmin, "display_name", None):
-        print("Starte frischen Login mit E-Mail und Passwort...")
+    # Fallback (nur wenn Hex fehlschlägt)
+    if not garmin:
+        print("Fallback: Versuche Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
-        try:
-            garmin.login()
-            garmin.display_name = garmin.get_display_name()
-            print(f"✅ Login via Password erfolgreich: {garmin.display_name}")
-        except Exception as e:
-            print(f"❌ Kompletter Login-Fehlschlag: {e}")
-            raise
+        garmin.login()
+        print(f"✅ Login via Password: {garmin.get_display_name()}")
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
