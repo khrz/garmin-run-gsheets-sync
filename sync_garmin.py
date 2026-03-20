@@ -59,45 +59,61 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("Bereinige Hex-Token von Kopierfehlern...")
+            print("🚀 Starte Nuclear-Token-Login...")
             import binascii, base64, re
             
-            # 1. Nur echte Hex-Zeichen (0-9, A-F) behalten
-            hex_cleaned = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
+            # 1. HEX-REINIGUNG
+            h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
+            print(f"DEBUG: Hex-Länge: {len(h_clean)}")
             
-            # 2. Falls Hex-Kette ungerade ist, das letzte Zeichen (Müll) weg
-            if len(hex_cleaned) % 2 != 0:
-                hex_cleaned = hex_cleaned[:-1]
+            # 2. HEX ZU BASE64-TEXT
+            b64_raw = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore').strip()
             
-            # 3. Umwandeln in den Base64-Text (W3si...)
-            b64_str = binascii.unhexlify(hex_cleaned).decode('utf-8', errors='ignore')
+            # 3. BASE64-REINIGUNG (Entfernt alles außer A-Z, 0-9, +, /, =)
+            b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_raw)
+            print(f"DEBUG: Base64-Länge vor Fix: {len(b64_clean)}")
             
-            # 4. Den Base64-Text auf mathematische Korrektheit trimmen (Vielfaches von 4)
-            b64_cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', b64_str)
-            valid_len = (len(b64_cleaned) // 4) * 4
-            b64_cleaned = b64_cleaned[:valid_len]
+            # --- DER GEWALT-FIX ---
+            # Wenn die Länge 2785 ist, MUSS das letzte Zeichen weg.
+            # Base64 darf niemals (4n + 1) lang sein.
+            if len(b64_clean) % 4 == 1:
+                print("DEBUG: Mathematischer Fehler (4n+1) erkannt. Kürze um 1 Zeichen...")
+                b64_clean = b64_clean[:-1]
             
-            # 5. Finales JSON dekodieren
-            session_json = base64.b64decode(b64_cleaned).decode('utf-8')
+            # Falls immer noch nicht durch 4 teilbar, Rest abschneiden
+            final_len = (len(b64_clean) // 4) * 4
+            if len(b64_clean) > final_len:
+                b64_clean = b64_clean[:final_len]
             
+            print(f"DEBUG: Finale Base64-Länge: {len(b64_clean)}")
+            
+            # 4. DEKODIEREN ZU JSON
+            json_bytes = base64.b64decode(b64_clean)
+            json_text = json_bytes.decode('utf-8')
+            
+            # 5. LADEN
             garmin = Garmin(garmin_email, garmin_password)
-            garmin.garth.loads(session_json)
+            garmin.garth.loads(json_text)
             
-            # WICHTIG: Wenn Session da ist, login() nur rufen wenn username fehlt
-            # Das verhindert den "OAuth1 required" Fehler bei Refreshes
             if not garmin.garth.username:
                 garmin.login()
                 
             print(f"✅ Login via Token erfolgreich: {garmin.get_display_name()}")
+            
         except Exception as e:
-            print(f"⚠️ Token-Login gescheitert: {e}")
+            print(f"⚠️ Nuclear-Login fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback (Sollte nur passieren, wenn Token komplett Schrott ist)
+    # Fallback
     if not garmin:
-        print("Starte Fallback-Login (wird in Actions meist blockiert)...")
+        print("Fallback: Versuche Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
-        garmin.login()
+        try:
+            garmin.login()
+            print(f"✅ Login via Password erfolgreich: {garmin.get_display_name()}")
+        except Exception as e:
+            print(f"❌ Kompletter Login-Fehlschlag: {e}")
+            raise
   
 
     # --- GOOGLE SHEETS SETUP ---
