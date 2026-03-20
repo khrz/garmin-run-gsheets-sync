@@ -59,42 +59,42 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte Flex-Hex Login...")
+            print("🚀 Starte finalen Token-Login...")
             import binascii, re
             
-            # 1. Hex säubern (entfernt evtl. Leerzeichen/Umbruche)
+            # 1. Hex säubern und dekodieren
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: 
                 h_clean = h_clean[:-1]
             
-            # 2. Zurück in Text wandeln
             raw_session = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore').strip()
-            
-            # 3. Anführungszeichen entfernen, falls welche mitkopiert wurden
             raw_session = raw_session.strip('"\'')
             
             if raw_session:
+                # 2. Garmin Instanz erstellen
                 garmin = Garmin(garmin_email, garmin_password)
-                # garth.loads akzeptiert beides: JSON-Klartext oder den Base64-String
+                
+                # 3. Session laden
                 garmin.garth.loads(raw_session)
                 
-                # Prüfen ob Login steht
+                # 4. Nur ein minimaler Check, ob der Login steht
                 if not garmin.garth.username:
                     garmin.login()
-                    
-                print(f"✅ Login via Flex-Hex erfolgreich: {garmin.get_display_name()}")
+                
+                print("✅ Token-Login war erfolgreich! (Daten werden geladen...)")
             else:
-                print("⚠️ Fehler: Hex-Code war leer nach der Dekodierung.")
+                print("⚠️ Hex-Code war leer.")
 
         except Exception as e:
-            print(f"⚠️ Token-Login fehlgeschlagen: {e}")
+            print(f"⚠️ Token-Login im letzten Schritt gescheitert: {e}")
             garmin = None
 
     # Fallback (Sicherheitsnetz)
     if not garmin:
-        print("Fallback: Standard-Login...")
+        print("Fallback auf Passwort-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
+  
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
