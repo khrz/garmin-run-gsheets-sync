@@ -52,33 +52,35 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
     
-    # --- GARMIN LOGIN ---
+
+# --- GARMIN LOGIN ---
     garmin = None
     if session_base64:
-    try:
-        print("Versuche Login...")
-        garmin = Garmin(email, password)
-        garmin.login()
-    except Exception as e:
-        print(f"⚠️ Session failed, fallback to password. Error: {e}")
-        import garth
-        import shutil
-        import os
-        
-        # Cache hart löschen
-        garth.client.sess.cookies.clear()
-        for path in [os.path.expanduser("~/.garth"), "./.garth"]:
-            if os.path.exists(path):
-                try:
-                    shutil.rmtree(path)
-                except:
-                    pass
-                    
-        # Frischer Neuversuch
-        print("Starte frischen Login ohne Session...")
-        garmin = Garmin(email, password)
-        garmin.login()
+        try:
+            print("Versuche Login mit Base64 Session...")
+            garmin = Garmin(garmin_email, garmin_password)
+            garmin.login()
+        except Exception as e:
+            print(f"⚠️ Session failed, fallback to password. Error: {e}")
+            import garth
+            import shutil
+            import os
+            
+            # Cache hart löschen
+            garth.client.sess.cookies.clear()
+            for path in [os.path.expanduser("~/.garth"), "./.garth"]:
+                if os.path.exists(path):
+                    try:
+                        shutil.rmtree(path)
+                    except:
+                        pass
+                        
+            # Frischer Neuversuch
+            print("Starte frischen Login ohne Session...")
+            garmin = Garmin(garmin_email, garmin_password)
+            garmin.login()
 
+    # Falls gar keine Session vorhanden war, oder der obige Block fehlgeschlagen ist
     if not garmin or not garmin.display_name:
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
@@ -86,6 +88,7 @@ def main():
         print(f"✅ Login via Password: {garmin.display_name}")
 
     # --- GOOGLE SHEETS SETUP ---
+
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
     client = gspread.authorize(creds)
