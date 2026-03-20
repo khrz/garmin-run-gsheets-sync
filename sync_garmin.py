@@ -61,20 +61,32 @@ def main():
             print("Versuche Login mit Base64 Session...")
             session_base64 = session_base64.strip()
             session_base64 += "=" * ((4 - len(session_base64) % 4) % 4)
-            decoded_session = base64.b64decode(session_base64).decode("utf-8")
+            decoded_json = base64.b64decode(session_base64).decode("utf-8")
             
-            garmin = Garmin(garmin_email, garmin_password)
-            # Der magische Fix: Wir laden die Session DIREKT in die Garmin-Instanz
-            garmin.garth.loads(decoded_session) 
+            # 1. Base64 in physischen Cache-Ordner entpacken
+            import json
+            os.makedirs("./.garth_cache", exist_ok=True)
+            session_dict = json.loads(decoded_json)
+            for key, value in session_dict.items():
+                with open(f"./.garth_cache/{key}.json", "w") as f:
+                    json.dump(value, f)
+            
+            # 2. Garmin-Client mit diesem Ordner initialisieren
+            garmin = Garmin(garmin_email, garmin_password, session_data="./.garth_cache")
             garmin.login()
         except Exception as e:
             print(f"⚠️ Session failed. Error: {e}")
             garmin = None
 
-    # Fallback
+    # Fallback: Wenn keine Session da ist oder sie nicht funktioniert hat
     if not garmin or not getattr(garmin, "display_name", None):
         print("Starte frischen Login mit E-Mail und Passwort...")
         # Erstelle eine komplett frische Instanz, um Altlasten im Speicher zu killen
+        for path in [os.path.expanduser("~/.garth"), "./.garth", "./.garth_cache"]:
+            if os.path.exists(path):
+                try: shutil.rmtree(path)
+                except: pass
+                
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
         garmin.display_name = garmin.get_display_name()
