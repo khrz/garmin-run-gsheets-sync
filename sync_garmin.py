@@ -64,7 +64,7 @@ def main():
             garmin.garth = garth.client
             garmin.display_name = garmin.garth.profile.get("displayName")
             print(f"✅ Login via Session: {garmin.display_name}")
-       except Exception as e:
+    except Exception as e:
         print("⚠️ Session failed, fallback to password")
         
         # --- DER FIX: Speicher komplett sprengen vor dem Neu-Versuch ---
