@@ -59,43 +59,36 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte finalen Token-Login...")
+            print("🚀 Starte schlanken Token-Login...")
             import binascii, re
             
-            # 1. Hex säubern und dekodieren
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
-            if len(h_clean) % 2 != 0: 
-                h_clean = h_clean[:-1]
+            if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
             raw_session = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore').strip()
             raw_session = raw_session.strip('"\'')
             
             if raw_session:
-                # 1. Garmin Instanz erstellen
                 garmin = Garmin(garmin_email, garmin_password)
-                
-                # 2. Session in den garth-Client laden
                 garmin.garth.loads(raw_session)
                 
-                # 3. DER FIX: Wir rufen login() IMMER auf.
-                # Da die Session geladen ist, wird garth kein MFA verlangen,
-                # sondern nur die internen Pfade für Health/UserSummary freischalten.
-                garmin.login()
+                # Setze den Namen manuell für die Health-URLs
+                # Das verhindert den 403 / None Fehler
+                garmin.display_name = garmin.garth.username
                 
-                print(f"✅ Login erfolgreich für: {garmin.display_name}")
+                print(f"✅ Token geladen für: {garmin.display_name}")
             else:
-                print("⚠️ Fehler: Hex-Code war leer.")
+                print("⚠️ Hex-Code war leer.")
 
         except Exception as e:
-            print(f"⚠️ Token-Login im letzten Schritt gescheitert: {e}")
+            print(f"⚠️ Token-Login fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback (Sicherheitsnetz)
-    if not garmin:
-        print("Fallback auf Passwort-Login...")
+    # Fallback NUR wenn gar kein garmin-Objekt existiert
+    if not garmin or not garmin.garth.username:
+        print("Fallback: Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
-  
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
