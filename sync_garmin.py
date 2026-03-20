@@ -59,43 +59,60 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("Prüfe Hex-Token mit JSON-Scanner...")
+            print("Prüfe Hex-Token...")
             import binascii, base64, re
             
-            # 1. Nur echte Hex-Zeichen behalten (0-9, a-f)
+            # 1. Hex-String säubern (nur 0-9, a-f)
             hex_cleaned = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
+            # Hex zu Base64-String (W3si...)
+            b64_str = binascii.unhexlify(hex_cleaned).decode('utf-8')
             
-            # 2. Hex zu Text umwandeln
-            raw_text = binascii.unhexlify(hex_cleaned).decode('utf-8', errors='ignore')
+            # 2. Base64-String radikal reparieren
+            # Wir nehmen nur Zeichen, die in Base64 erlaubt sind
+            b64_cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', b64_str)
             
-            # 3. EXTRAKTION: Wir suchen nur den Teil zwischen [ und ]
-            # Das ignoriert alle "Geisterzeichen" davor oder danach komplett.
-            match = re.search(r'(\[.*\])', raw_text)
-            if match:
-                json_string = match.group(1)
-                
+            # Der "2785"-Fix: Base64 darf nie (4n + 1) lang sein. 
+            # Wenn das passiert, ist das letzte Zeichen Müll.
+            if len(b64_cleaned) % 4 == 1:
+                b64_cleaned = b64_cleaned[:-1]
+            
+            # Korrektes Padding erzwingen
+            missing_padding = len(b64_cleaned) % 4
+            if missing_padding:
+                b64_cleaned += '=' * (4 - missing_padding)
+            
+            # 3. Dekodieren zu JSON
+            json_text = base64.b64decode(b64_cleaned).decode('utf-8')
+            
+            # 4. In Garmin laden
+            if json_text.startswith('[') or json_text.startswith('{'):
                 garmin = Garmin(garmin_email, garmin_password)
-                garmin.garth.loads(json_string)
+                garmin.garth.loads(json_text)
                 
-                # Falls garth das JSON geladen hat, brauchen wir garmin.login() oft gar nicht
-                if not garmin.garth.username:
+                # Wir prüfen nur, ob ein Username geladen wurde
+                if garmin.garth.username:
+                    print(f"✅ Login via Token erfolgreich: {garmin.get_display_name()}")
+                else:
+                    # Falls geladen aber nicht aktiv, Trigger ohne Passwort
                     garmin.login()
-                    
-                print(f"✅ Login erfolgreich: {garmin.get_display_name()}")
+                    print(f"✅ Login via Token (Refreshed) erfolgreich: {garmin.get_display_name()}")
             else:
-                print("⚠️ Kein gültiges JSON-Format im Token gefunden.")
-                
+                print("⚠️ Dekodierter Text ist kein gültiges JSON.")
+
         except Exception as e:
             print(f"⚠️ Token-Login fehlgeschlagen: {e}")
             garmin = None
 
     # Fallback
     if not garmin:
-        print("Starte Fallback-Login...")
+        print("Fallback: Versuche Standard-Login mit Passwort...")
         garmin = Garmin(garmin_email, garmin_password)
-        garmin.login()
-        print(f"✅ Login via Password: {garmin.get_display_name()}")
-           
+        try:
+            garmin.login()
+            print(f"✅ Login via Password erfolgreich: {garmin.get_display_name()}")
+        except Exception as e:
+            print(f"❌ Kompletter Login-Fehlschlag: {e}")
+            raise
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
