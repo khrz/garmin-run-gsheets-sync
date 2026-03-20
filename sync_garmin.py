@@ -53,57 +53,47 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
 
-    # --- GARMIN LOGIN ---
+  # --- GARMIN LOGIN ---
     garmin_tokens_hex = os.environ.get('GARMIN_TOKENS')
     garmin = None
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte Deep-Clean-Token-Login...")
             import binascii, base64, re
-            
-            # 1. HEX-REINIGUNG & DEKODIERUNG
+            # 1. Nur echte Hex-Zeichen behalten
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
-            b64_raw = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore')
             
-            # 2. BASE64-REINIGUNG
-            b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_raw)
-            # Mathematischen 4er-Block erzwingen
-            b64_clean = b64_clean[:(len(b64_clean) // 4) * 4]
-            json_text = base64.b64decode(b64_clean).decode('utf-8')
-
-            # --- NEU: TOKEN-REPARATUR IM JSON ---
-            # Wir suchen nach langen Token-Strings im JSON und zwingen sie auf 4er-Länge
-            def fix_token_padding(match):
-                token = match.group(1)
-                # Falls Token ungerade (4n+1), das letzte Zeichen weg
-                if len(token) % 4 == 1: token = token[:-1]
-                # Korrektes Padding auffüllen
-                token += "=" * ((4 - len(token) % 4) % 4)
-                return f'"{token}"'
+            # 2. In Base64-Text umwandeln
+            b64_str = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore')
             
-            # Repariert alle Base64-ähnlichen Strings innerhalb des JSON
-            json_text = re.sub(r'"([A-Za-z0-9+/=_-]{50,})"', fix_token_padding, json_text)
+            # 3. RADIKAL-REINIGUNG: Nur A-Z, 0-9, +, / behalten (kein =, kein \n)
+            b64_pure = re.sub(r'[^A-Za-z0-9+/]', '', b64_str)
             
-            # 3. LADEN
+            # 4. Mathematische Korrektur auf Vielfaches von 4
+            # Das tötet den "2785" Fehler endgültig
+            valid_len = (len(b64_pure) // 4) * 4
+            b64_final = b64_pure[:valid_len]
+            
+            # 5. Padding manuell hinzufügen (sauberer Weg)
+            b64_final += "=" * ((4 - len(b64_final) % 4) % 4)
+            
+            # 6. Dekodieren und Laden
+            json_text = base64.b64decode(b64_final).decode('utf-8')
             garmin = Garmin(garmin_email, garmin_password)
             garmin.garth.loads(json_text)
             
             if not garmin.garth.username:
                 garmin.login()
-                
             print(f"✅ Login erfolgreich: {garmin.get_display_name()}")
-            
         except Exception as e:
-            print(f"⚠️ Deep-Clean-Login fehlgeschlagen: {e}")
+            print(f"⚠️ Token-Login fehlgeschlagen: {e}")
             garmin = None
 
-    # Fallback
     if not garmin:
-        print("Fallback: Standard-Login...")
+        print("Fallback auf Passwort-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
-        
+
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
