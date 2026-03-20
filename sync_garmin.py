@@ -62,6 +62,7 @@ def main():
             print("🚀 Starte Token-Login...")
             import binascii, re
             
+            # Hex säubern
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
@@ -72,12 +73,13 @@ def main():
                 garmin = Garmin(garmin_email, garmin_password)
                 garmin.garth.loads(raw_session)
                 
-                # Wir setzen den Namen so, wie Garmin ihn für Health-Daten will
-                # Wir nehmen den 'userName' (Slug), falls vorhanden, sonst 'displayName'
+                # DER FIX FÜR DEN 403 FEHLER:
+                # Wir holen den exakten 'userName' (Slug) aus dem Profil.
+                # Dieser Name MUSS in die URL für Health-Daten.
                 profile = garmin.garth.profile
                 garmin.display_name = profile.get('userName') or profile.get('displayName')
                 
-                print(f"✅ Session geladen für: {garmin.display_name}")
+                print(f"✅ Session aktiv für: {garmin.display_name}")
             else:
                 print("⚠️ Hex-Code war leer.")
 
