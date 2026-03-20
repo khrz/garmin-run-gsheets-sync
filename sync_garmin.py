@@ -59,63 +59,51 @@ def main():
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte Nuclear-Token-Login...")
+            print("🚀 Starte Deep-Clean-Token-Login...")
             import binascii, base64, re
             
-            # 1. HEX-REINIGUNG
+            # 1. HEX-REINIGUNG & DEKODIERUNG
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
-            print(f"DEBUG: Hex-Länge: {len(h_clean)}")
+            b64_raw = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore')
             
-            # 2. HEX ZU BASE64-TEXT
-            b64_raw = binascii.unhexlify(h_clean).decode('utf-8', errors='ignore').strip()
-            
-            # 3. BASE64-REINIGUNG (Entfernt alles außer A-Z, 0-9, +, /, =)
+            # 2. BASE64-REINIGUNG
             b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_raw)
-            print(f"DEBUG: Base64-Länge vor Fix: {len(b64_clean)}")
+            # Mathematischen 4er-Block erzwingen
+            b64_clean = b64_clean[:(len(b64_clean) // 4) * 4]
+            json_text = base64.b64decode(b64_clean).decode('utf-8')
+
+            # --- NEU: TOKEN-REPARATUR IM JSON ---
+            # Wir suchen nach langen Token-Strings im JSON und zwingen sie auf 4er-Länge
+            def fix_token_padding(match):
+                token = match.group(1)
+                # Falls Token ungerade (4n+1), das letzte Zeichen weg
+                if len(token) % 4 == 1: token = token[:-1]
+                # Korrektes Padding auffüllen
+                token += "=" * ((4 - len(token) % 4) % 4)
+                return f'"{token}"'
             
-            # --- DER GEWALT-FIX ---
-            # Wenn die Länge 2785 ist, MUSS das letzte Zeichen weg.
-            # Base64 darf niemals (4n + 1) lang sein.
-            if len(b64_clean) % 4 == 1:
-                print("DEBUG: Mathematischer Fehler (4n+1) erkannt. Kürze um 1 Zeichen...")
-                b64_clean = b64_clean[:-1]
+            # Repariert alle Base64-ähnlichen Strings innerhalb des JSON
+            json_text = re.sub(r'"([A-Za-z0-9+/=_-]{50,})"', fix_token_padding, json_text)
             
-            # Falls immer noch nicht durch 4 teilbar, Rest abschneiden
-            final_len = (len(b64_clean) // 4) * 4
-            if len(b64_clean) > final_len:
-                b64_clean = b64_clean[:final_len]
-            
-            print(f"DEBUG: Finale Base64-Länge: {len(b64_clean)}")
-            
-            # 4. DEKODIEREN ZU JSON
-            json_bytes = base64.b64decode(b64_clean)
-            json_text = json_bytes.decode('utf-8')
-            
-            # 5. LADEN
+            # 3. LADEN
             garmin = Garmin(garmin_email, garmin_password)
             garmin.garth.loads(json_text)
             
             if not garmin.garth.username:
                 garmin.login()
                 
-            print(f"✅ Login via Token erfolgreich: {garmin.get_display_name()}")
+            print(f"✅ Login erfolgreich: {garmin.get_display_name()}")
             
         except Exception as e:
-            print(f"⚠️ Nuclear-Login fehlgeschlagen: {e}")
+            print(f"⚠️ Deep-Clean-Login fehlgeschlagen: {e}")
             garmin = None
 
     # Fallback
     if not garmin:
-        print("Fallback: Versuche Standard-Login...")
+        print("Fallback: Standard-Login...")
         garmin = Garmin(garmin_email, garmin_password)
-        try:
-            garmin.login()
-            print(f"✅ Login via Password erfolgreich: {garmin.get_display_name()}")
-        except Exception as e:
-            print(f"❌ Kompletter Login-Fehlschlag: {e}")
-            raise
-  
-
+        garmin.login()
+        
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
