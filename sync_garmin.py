@@ -77,11 +77,15 @@ def main():
                 # 3. Session laden
                 garmin.garth.loads(raw_session)
                 
-                # 4. Nur ein minimaler Check, ob der Login steht
+                # --- DER 403-FIX: Benutzername manuell setzen ---
+                garmin.display_name = garmin.garth.username
+                # -----------------------------------------------
+                
+                # Prüfen ob Login steht
                 if not garmin.garth.username:
                     garmin.login()
                 
-                print("✅ Token-Login war erfolgreich! (Daten werden geladen...)")
+                print(f"✅ Login erfolgreich für: {garmin.display_name}")
             else:
                 print("⚠️ Hex-Code war leer.")
 
