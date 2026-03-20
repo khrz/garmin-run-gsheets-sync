@@ -62,7 +62,6 @@ def main():
             print("🚀 Starte Token-Login...")
             import binascii, re
             
-            # Hex säubern
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
@@ -73,26 +72,24 @@ def main():
                 garmin = Garmin(garmin_email, garmin_password)
                 garmin.garth.loads(raw_session)
                 
-                # DER ENTSCHEIDENDE FIX:
-                # Wir holen uns den Namen aus dem Profil. 
-                # Falls 'userName' (der slug) existiert, nehmen wir den, sonst displayName.
+                # Wir setzen den Namen so, wie Garmin ihn für Health-Daten will
+                # Wir nehmen den 'userName' (Slug), falls vorhanden, sonst 'displayName'
                 profile = garmin.garth.profile
-                garmin.display_name = profile.get('userName') or profile.get('displayName') or garmin.garth.username
+                garmin.display_name = profile.get('userName') or profile.get('displayName')
                 
                 print(f"✅ Session geladen für: {garmin.display_name}")
             else:
-                print("⚠️ Hex-Code leer.")
+                print("⚠️ Hex-Code war leer.")
 
         except Exception as e:
             print(f"⚠️ Token-Fehler: {e}")
             garmin = None
 
-    # Fallback (Sicherheitsnetz)
     if not garmin or not garmin.garth.username:
         print("Fallback: Passwort-Login...")
         garmin = Garmin(garmin_email, garmin_password)
         garmin.login()
-
+        
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
