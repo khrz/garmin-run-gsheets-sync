@@ -56,17 +56,23 @@ def main():
     # --- GARMIN LOGIN ---
     garmin = None
     
+    # 1. RADIKALER RESET VOR DEM ERSTEN VERSUCH
+    for path in [os.path.expanduser("~/.garth"), "./.garth"]:
+        if os.path.exists(path):
+            try: shutil.rmtree(path)
+            except: pass
+            
+    garth.client.oauth1_token = None
+    garth.client.oauth2_token = None
+    
+    # 2. BASE64 SESSION LADEN
     if session_base64:
         try:
             print("Versuche Login mit Base64 Session...")
-            
-            # 1. Base64 reparieren (Leerzeichen entfernen & fehlende '=' anhängen)
             session_base64 = session_base64.strip()
             session_base64 += "=" * ((4 - len(session_base64) % 4) % 4)
             
-            # 2. Decodieren und an garth übergeben
-            decoded_session = base64.b64decode(session_base64).decode("utf-8")
-            garth.client.loads(decoded_session)
+            garth.client.loads(base64.b64decode(session_base64).decode("utf-8"))
             
             garmin = Garmin(garmin_email, garmin_password)
             garmin.login()
@@ -74,17 +80,10 @@ def main():
             print(f"⚠️ Session failed. Error: {e}")
             garmin = None
 
-    # Fallback: Wenn keine Session da ist oder sie nicht funktioniert hat
+    # 3. FALLBACK LOGIN
     if not garmin or not getattr(garmin, "display_name", None):
         try:
             print("Starte frischen Login mit E-Mail und Passwort...")
-            garth.client.sess.cookies.clear()
-            
-            for path in [os.path.expanduser("~/.garth"), "./.garth"]:
-                if os.path.exists(path):
-                    try: shutil.rmtree(path)
-                    except: pass
-            
             garmin = Garmin(garmin_email, garmin_password)
             garmin.login()
             garmin.display_name = garmin.get_display_name()
@@ -92,7 +91,6 @@ def main():
         except Exception as e:
             print(f"❌ Kompletter Login-Fehlschlag: {e}")
             raise
-   
 
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
