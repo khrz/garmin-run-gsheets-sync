@@ -85,10 +85,10 @@ def main():
             print(f"⚠️ Token-Fehler: {e}")
             garmin = None
 
+    # Fallback KOMPLETT entfernen oder auskommentieren:
     if not garmin or not garmin.garth.username:
-        print("Fallback: Passwort-Login...")
-        garmin = Garmin(garmin_email, garmin_password)
-        garmin.login()
+        print("⚠️ Token-Login fehlgeschlagen. Breche ab, um Sperre zu vermeiden.")
+        return # Beendet das Skript hier einfach
         
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
