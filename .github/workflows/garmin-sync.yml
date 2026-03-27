@@ -4,7 +4,7 @@ on:
   schedule:
     # 07:13 UTC entspricht 09:13 Uhr (Sommerzeit Deutschland)
     # 17:13 UTC entspricht 19:13 Uhr (Sommerzeit Deutschland)
-    - cron: '13 7,17 * * *'
+    - cron: '37 6,16 * * *' 
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
