@@ -1,5 +1,5 @@
 garminconnect>=0.2.39
-garth>=0.8.0
+garth<0.7.0
 gspread
 google-auth
 python-dotenv
