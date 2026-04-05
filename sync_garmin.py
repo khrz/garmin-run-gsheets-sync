@@ -53,15 +53,16 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
 
-    # --- GARMIN LOGIN ---
+    # --- GARMIN LOGIN (Version 2026 / garth 0.8+) ---
     garmin_tokens_hex = os.environ.get('GARMIN_TOKENS')
     garmin = None
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte Token-Login...")
-            import binascii, re
+            print("🚀 Starte modernen Token-Login...")
+            import binascii, re, garth
             
+            # Hex-Code säubern
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
@@ -69,15 +70,19 @@ def main():
             raw_session = raw_session.strip('"\'')
             
             if raw_session:
+                # 1. Die Session direkt in garth laden (global)
+                garth.loads(raw_session)
+                
+                # 2. Das Garmin-Objekt initialisieren 
+                # (Es nutzt jetzt automatisch die geladene garth-Session)
                 garmin = Garmin(garmin_email, garmin_password)
-                garmin.garth.loads(raw_session)
                 
-                # --- DER ENTSCHEIDENDE FIX ---
-                # Wir nutzen die UUID (displayName), da der userName deine E-Mail ist.
-                # E-Mails führen in der URL zu einem 403-Fehler.
-                garmin.display_name = garmin.garth.profile.get('displayName')
+                # 3. Den Namen für die URLs setzen
+                # In v0.8+ liegt das Profil direkt im garth-Client
+                profile = garth.client.profile
+                garmin.display_name = profile.get('userName') or profile.get('displayName')
                 
-                print(f"✅ Session aktiv für ID: {garmin.display_name}")
+                print(f"✅ Session erfolgreich reaktiviert für: {garmin.display_name}")
             else:
                 print("⚠️ Hex-Code war leer.")
 
@@ -85,10 +90,11 @@ def main():
             print(f"⚠️ Token-Fehler: {e}")
             garmin = None
 
-    # Fallback KOMPLETT entfernen oder auskommentieren:
-    if not garmin or not garmin.garth.username:
-        print("⚠️ Token-Login fehlgeschlagen. Breche ab, um Sperre zu vermeiden.")
-        return # Beendet das Skript hier einfach
+    # Fallback (Sicherheitsnetz)
+    if not garmin:
+        print("Fallback: Passwort-Login...")
+        garmin = Garmin(garmin_email, garmin_password)
+        garmin.login()
         
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
