@@ -53,16 +53,16 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
     session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
 
-    # --- GARMIN LOGIN (Robuste Version 2026) ---
+    # --- GARMIN LOGIN (Version 2026 / garth 0.8+) ---
     garmin_tokens_hex = os.environ.get('GARMIN_TOKENS')
     garmin = None
     
     if garmin_tokens_hex:
         try:
-            print("🚀 Starte modernen Token-Login...")
-            import binascii, re, garth
+            print("🚀 Starte Token-Login...")
+            import binascii, re
             
-            # Hex säubern
+            # Hex-Code säubern
             h_clean = re.sub(r'[^0-9a-fA-F]', '', garmin_tokens_hex)
             if len(h_clean) % 2 != 0: h_clean = h_clean[:-1]
             
@@ -70,20 +70,20 @@ def main():
             raw_session = raw_session.strip('"\'')
             
             if raw_session:
-                # FIX: In neueren garth-Versionen nutzen wir garth.client.loads oder garth.loads
-                # Wir probieren beide Wege, um absolut sicher zu gehen
-                try:
-                    garth.loads(raw_session)
-                except AttributeError:
-                    garth.client.loads(raw_session)
-                
+                # 1. ERST das Garmin-Objekt initialisieren
                 garmin = Garmin(garmin_email, garmin_password)
                 
-                # Namen setzen (UUID/Slug Fix)
-                profile = garth.client.profile
-                garmin.display_name = profile.get('userName') or profile.get('displayName')
+                # 2. DANN die Session exakt in dieses Objekt laden!
+                garmin.garth.loads(raw_session)
                 
-                print(f"✅ Session reaktiviert für: {garmin.display_name}")
+                # 3. Profil checken und Namen setzen
+                profile = garmin.garth.profile
+                if profile:
+                    garmin.display_name = profile.get('userName') or profile.get('displayName')
+                    print(f"✅ Session erfolgreich reaktiviert für: {garmin.display_name}")
+                else:
+                    print("⚠️ Profil leer, Token ungültig?")
+                    garmin = None
             else:
                 print("⚠️ Hex-Code war leer.")
 
@@ -91,11 +91,11 @@ def main():
             print(f"⚠️ Token-Fehler: {e}")
             garmin = None
 
-    # WICHTIG: KEIN Passwort-Fallback mehr! 
-    # Wenn der Token nicht geht, brechen wir ab, statt eine 429-Sperre zu riskieren.
-    if not garmin:
-        print("❌ Login fehlgeschlagen. Bitte neuen Token am Mac generieren.")
-        return
+    # Fallback GESTRICHEN (Schutz vor 429-Sperre)
+    if not garmin or not getattr(garmin.garth, 'profile', None):
+        print("❌ Token ungültig. Skript bricht ab, um eine IP-Sperre zu vermeiden.")
+        import sys
+        sys.exit(1)
         
     # --- GOOGLE SHEETS SETUP ---
     creds_dict = json.loads(google_creds_json)
