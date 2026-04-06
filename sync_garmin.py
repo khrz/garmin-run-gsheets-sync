@@ -5,6 +5,7 @@ import zipfile
 import io
 import garth
 import shutil
+import sys
 from datetime import datetime, timedelta
 from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
@@ -51,7 +52,6 @@ def main():
     garmin_password = os.environ.get('GARMIN_PASSWORD')
     google_creds_json = os.environ.get('GOOGLE_CREDENTIALS')
     sheet_id = os.environ.get('SHEET_ID')
-    session_base64 = os.environ.get('GARMIN_SESSION_BASE64')
 
     # --- GARMIN LOGIN (Version 2026 / garth 0.8+) ---
     garmin_tokens_hex = os.environ.get('GARMIN_TOKENS')
@@ -73,11 +73,11 @@ def main():
                 # 1. ERST das Garmin-Objekt initialisieren
                 garmin = Garmin(garmin_email, garmin_password)
                 
-                # 2. DANN die Session exakt in dieses Objekt laden!
-                garmin.garth.loads(raw_session)
+                # 2. DANN die Session exakt in dieses Objekt laden! (FIX: .client statt .garth)
+                garmin.client.loads(raw_session)
                 
                 # 3. Profil checken und Namen setzen
-                profile = garmin.garth.profile
+                profile = garmin.client.profile
                 if profile:
                     garmin.display_name = profile.get('userName') or profile.get('displayName')
                     print(f"✅ Session erfolgreich reaktiviert für: {garmin.display_name}")
@@ -92,9 +92,8 @@ def main():
             garmin = None
 
     # Fallback GESTRICHEN (Schutz vor 429-Sperre)
-    if not garmin or not getattr(garmin.garth, 'profile', None):
+    if not garmin or not getattr(garmin.client, 'profile', None):
         print("❌ Token ungültig. Skript bricht ab, um eine IP-Sperre zu vermeiden.")
-        import sys
         sys.exit(1)
         
     # --- GOOGLE SHEETS SETUP ---
