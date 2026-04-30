@@ -11,7 +11,7 @@ def safe_num(val, default=0):
     return float(val) if val is not None else default
 
 def main():
-    print("🚀 Skript gestartet (Intervals.icu Clean Edition v2)...")
+    print("🚀 Skript gestartet (Intervals.icu Clean Edition v3)...")
     
     intervals_id = os.environ.get('INTERVALS_ID')
     intervals_api_key = os.environ.get('INTERVALS_API_KEY')
@@ -72,8 +72,8 @@ def main():
                     round(safe_num(act.get('moving_time')) / 60, 2),
                     safe_num(act.get('average_heartrate')), 
                     safe_num(act.get('max_heartrate')), 
-                    safe_num(act.get('average_cadence')), 
-                    safe_num(act.get('max_cadence')),
+                    safe_num(act.get('average_cadence')), # Avg Cadence bleibt!
+                    # Max Cadence wurde hier restlos entfernt
                     round(safe_num(act.get('average_speed')) * 3.6, 2),
                     round(safe_num(act.get('max_speed')) * 3.6, 2),
                     safe_num(act.get('total_elevation_gain')), 
