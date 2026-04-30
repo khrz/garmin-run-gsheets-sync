@@ -72,8 +72,7 @@ def main():
                     round(safe_num(act.get('moving_time')) / 60, 2),
                     safe_num(act.get('average_heartrate')), 
                     safe_num(act.get('max_heartrate')), 
-                    safe_num(act.get('average_cadence')), # Avg Cadence bleibt!
-                    # Max Cadence wurde hier restlos entfernt
+                    round(safe_num(act.get('average_cadence')) * 2) if act.get('type') == 'Run' else round(safe_num(act.get('average_cadence'))),
                     round(safe_num(act.get('average_speed')) * 3.6, 2),
                     round(safe_num(act.get('max_speed')) * 3.6, 2),
                     safe_num(act.get('total_elevation_gain')), 
