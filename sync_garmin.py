@@ -59,6 +59,20 @@ def main():
             
             if f"{date_part} {time_part}" not in existing_workouts:
                 
+                # --- INTELLIGENTE LOGIK FÜR KADENZ & HÖHE ---
+                raw_type = (act.get('type') or '').lower()
+                raw_cadence = safe_num(act.get('average_cadence'))
+                
+                # Verdoppelt Kadenz für ALLES was 'run' oder 'treadmill' enthält
+                if 'run' in raw_type or 'treadmill' in raw_type:
+                    cadence = round(raw_cadence * 2)
+                else:
+                    cadence = round(raw_cadence)
+                
+                # Fallback für Höhenmeter (verschiedene API-Keys)
+                min_elev = act.get('min_altitude') or act.get('icu_min_altitude') or 0
+                max_elev = act.get('max_altitude') or act.get('icu_max_altitude') or 0
+                
                 avg_pwr = safe_num(act.get('icu_average_watts') or act.get('device_watts') or act.get('average_watts'))
                 max_pwr = safe_num(act.get('icu_pm_p_max') or act.get('p_max') or act.get('max_watts'))
                 
@@ -88,7 +102,7 @@ def main():
                     round(max_elev, 1)          # V
                 ]
                 workout_sheet.append_row(row)
-                print(f"✅ Workout: {date_part} {time_part} ({act.get('name', '')})")
+                print(f"✅ Sync: {date_part} - {act.get('name')} | Kadenz: {cadence} | Max Elev: {max_elev}")
     except Exception as e:
         print(f"❌ Workout-Fehler: {e}")
 
