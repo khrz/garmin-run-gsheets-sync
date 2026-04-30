@@ -60,11 +60,9 @@ def main():
             if f"{date_part} {time_part}" not in existing_workouts:
                 
                 # --- SONDERFELDER AUSLESEN ---
-                # 1. GCT Balance (Links/Rechts)
                 lr_bal = act.get('avg_lr_balance')
                 gct_str = f"{round(lr_bal, 1)}% L / {round(100 - lr_bal, 1)}% R" if lr_bal else "-"
                 
-                # 2. Power-Werte (Intervals hat mehrere Felder dafür)
                 avg_pwr = safe_num(act.get('icu_average_watts') or act.get('device_watts') or act.get('average_watts'))
                 max_pwr = safe_num(act.get('icu_pm_p_max') or act.get('p_max') or act.get('max_watts'))
                 
@@ -85,13 +83,13 @@ def main():
                     round(safe_num(act.get('max_speed')) * 3.6, 2),
                     safe_num(act.get('total_elevation_gain')), 
                     safe_num(act.get('total_elevation_loss')),
-                    safe_num(act.get('average_stride_length')),
-                    gct_str, # ✅ GCT Balance eingefügt
-                    0, # gct
-                    0, # vertOsc
-                    0, # gradeAdjustedSpeed
-                    avg_pwr, # ✅ Avg Power eingefügt
-                    max_pwr, # ✅ Max Power eingefügt
+                    round(safe_num(act.get('average_stride')), 2), # ✅ Stride Length
+                    gct_str, 
+                    0, # gct (nicht in API)
+                    0, # vertOsc (nicht in API)
+                    round(safe_num(act.get('gap')), 2), # ✅ GAP
+                    avg_pwr, 
+                    max_pwr, 
                     safe_num(act.get('icu_tss')), 
                     0, # steps in activity
                     0, # totalReps
