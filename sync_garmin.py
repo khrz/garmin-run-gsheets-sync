@@ -6,6 +6,11 @@ from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 import gspread
 
+# --- HILFSFUNKTIONEN ---
+def safe_num(val, default=0):
+    """Verhindert Abstürze, wenn Intervals 'null' (None) statt einer Zahl liefert."""
+    return float(val) if val is not None else default
+
 def main():
     print("🚀 Skript gestartet (Intervals.icu Edition)...")
     
@@ -15,7 +20,7 @@ def main():
     sheet_id = os.environ.get('SHEET_ID')
 
     if not all([intervals_id, intervals_api_key, google_creds_json, sheet_id]):
-        print("❌ Fehler: Umgebungsvariablen fehlen (INTERVALS_ID, INTERVALS_API_KEY, GOOGLE_CREDENTIALS, SHEET_ID).")
+        print("❌ Fehler: Umgebungsvariablen fehlen.")
         sys.exit(1)
 
     # --- GOOGLE SHEETS SETUP ---
@@ -25,12 +30,12 @@ def main():
     spreadsheet = client.open_by_key(sheet_id)
 
     # --- INTERVALS.ICU API SETUP ---
-    # Login über Basic Auth: Nutzername ist immer 'API_KEY', das Passwort ist dein generierter Key.
     auth = requests.auth.HTTPBasicAuth('API_KEY', intervals_api_key)
     base_url = f"https://intervals.icu/api/v1/athlete/{intervals_id}"
     
     now = datetime.now()
-    oldest_workout = (now - timedelta(days=21)).strftime("%Y-%m-%dT00:00:00")
+    # Zeitraum auf 45 Tage erhöht, um alle Altlasten sicher zu erwischen
+    oldest_workout = (now - timedelta(days=45)).strftime("%Y-%m-%dT00:00:00")
     newest = now.strftime("%Y-%m-%dT23:59:59")
     oldest_health = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
@@ -41,13 +46,11 @@ def main():
         all_rows = workout_sheet.get_all_values()
         existing_workouts = {f"{row[0]} {row[1]}" for row in all_rows if len(row) > 1}
         
-        # Aktivitäten von Intervals abrufen
         act_url = f"{base_url}/activities?oldest={oldest_workout}&newest={newest}"
         response = requests.get(act_url, auth=auth)
         response.raise_for_status()
         activities = response.json()
         
-        # Chronologisch sortieren (älteste zuerst)
         activities = sorted(activities, key=lambda x: x.get('start_date_local', ''))
         
         for act in activities:
@@ -57,43 +60,43 @@ def main():
             date_part, time_part = start_local.split("T")
             
             if f"{date_part} {time_part}" not in existing_workouts:
-                # Fallback für tiefe Garmin-Laufmetriken, die Intervals evtl. nicht mitspeichert
+                # Alle numerischen Werte sind jetzt durch safe_num() gegen 'null' geschützt
                 row = [
                     date_part, 
                     time_part, 
-                    act.get('type', ''), 
-                    act.get('name', ''),
-                    round(act.get('distance', 0) / 1000, 2),
-                    act.get('calories', 0), 
-                    round(act.get('moving_time', 0) / 60, 2),
-                    act.get('average_heartrate', 0), 
-                    act.get('max_heartrate', 0), 
+                    act.get('type') or '', 
+                    act.get('name') or '',
+                    round(safe_num(act.get('distance')) / 1000, 2),
+                    safe_num(act.get('calories')), 
+                    round(safe_num(act.get('moving_time')) / 60, 2),
+                    safe_num(act.get('average_heartrate')), 
+                    safe_num(act.get('max_heartrate')), 
                     0, # aerobicTE
-                    act.get('average_cadence', 0), 
-                    act.get('max_cadence', 0),
-                    round(act.get('average_speed', 0) * 3.6, 2),
-                    round(act.get('max_speed', 0) * 3.6, 2),
-                    act.get('total_elevation_gain', 0), 
-                    0, # elevationLoss
-                    act.get('average_stride_length', 0),
+                    safe_num(act.get('average_cadence')), 
+                    safe_num(act.get('max_cadence')),
+                    round(safe_num(act.get('average_speed')) * 3.6, 2),
+                    round(safe_num(act.get('max_speed')) * 3.6, 2),
+                    safe_num(act.get('total_elevation_gain')), 
+                    safe_num(act.get('total_elevation_loss')),
+                    safe_num(act.get('average_stride_length')),
                     "-", # gct balance
                     0, # gct
                     0, # vertOsc
                     0, # gradeAdjustedSpeed
-                    act.get('average_watts', 0), 
-                    act.get('max_watts', 0),
-                    act.get('icu_tss', 0), # TSS wird direkt von Intervals berechnet
+                    safe_num(act.get('average_watts')), 
+                    safe_num(act.get('max_watts')),
+                    safe_num(act.get('icu_tss')), 
                     0, # steps in activity
                     0, # totalReps
                     0, # poses
                     0, # bodyBatteryDrain
-                    0, # minTemp
-                    0, # maxTemp
+                    safe_num(act.get('min_temp')), 
+                    safe_num(act.get('max_temp')),
                     0, # avgResp
-                    round(act.get('moving_time', 0) / 60, 2),
-                    round(act.get('elapsed_time', 0) / 60, 2), 
-                    0, # minEle
-                    0  # maxEle
+                    round(safe_num(act.get('moving_time')) / 60, 2),
+                    round(safe_num(act.get('elapsed_time')) / 60, 2), 
+                    safe_num(act.get('min_altitude')), 
+                    safe_num(act.get('max_altitude'))
                 ]
                 workout_sheet.append_row(row)
                 print(f"✅ Workout: {date_part} {time_part} ({act.get('name', '')})")
@@ -107,7 +110,6 @@ def main():
         health_values = health_sheet.get_all_values()
         date_map = {row[0]: i + 1 for i, row in enumerate(health_values) if row}
         
-        # Wellness-Daten holen
         well_url = f"{base_url}/wellness?oldest={oldest_health}&newest={newest[:10]}"
         response = requests.get(well_url, auth=auth)
         response.raise_for_status()
@@ -123,7 +125,6 @@ def main():
             hrv_avg = day.get('hrv', "-")
             rhr = day.get('restingHR', "-")
             
-            # Garmin-Metriken aus Intervals übernehmen
             bb_max = day.get('bodyBatteryHighest', "-")
             stress = day.get('stress', "-")
             steps = day.get('steps', 0)
