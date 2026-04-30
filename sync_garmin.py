@@ -73,7 +73,7 @@ def main():
                     safe_num(act.get('average_heartrate')), 
                     safe_num(act.get('max_heartrate')), 
                     # Verdoppelt die Kadenz für alle Lauf-Arten (Run, Trail Run, Treadmill etc.)
-                    round(safe_num(act.get('average_cadence')) * 2) if act.get('type') in ['Run', 'Trail Run', 'Treadmill', 'VirtualRun'] else round(safe_num(act.get('average_cadence'))),
+                    round(safe_num(act.get('average_cadence')) * 2) if 'run' in (act.get('type') or '').lower() or 'treadmill' in (act.get('type') or '').lower() else round(safe_num(act.get('average_cadence'))),
                     round(safe_num(act.get('average_speed')) * 3.6, 2),
                     round(safe_num(act.get('max_speed')) * 3.6, 2),
                     safe_num(act.get('total_elevation_gain')), 
