@@ -8,7 +8,6 @@ import gspread
 
 # --- HILFSFUNKTIONEN ---
 def safe_num(val, default=0):
-    """Verhindert Abstürze, wenn Intervals 'null' (None) statt einer Zahl liefert."""
     return float(val) if val is not None else default
 
 def main():
@@ -34,7 +33,6 @@ def main():
     base_url = f"https://intervals.icu/api/v1/athlete/{intervals_id}"
     
     now = datetime.now()
-    # Zeitraum auf 45 Tage erhöht, um alle Altlasten sicher zu erwischen
     oldest_workout = (now - timedelta(days=45)).strftime("%Y-%m-%dT00:00:00")
     newest = now.strftime("%Y-%m-%dT23:59:59")
     oldest_health = (now - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -60,7 +58,16 @@ def main():
             date_part, time_part = start_local.split("T")
             
             if f"{date_part} {time_part}" not in existing_workouts:
-                # Alle numerischen Werte sind jetzt durch safe_num() gegen 'null' geschützt
+                
+                # --- SONDERFELDER AUSLESEN ---
+                # 1. GCT Balance (Links/Rechts)
+                lr_bal = act.get('avg_lr_balance')
+                gct_str = f"{round(lr_bal, 1)}% L / {round(100 - lr_bal, 1)}% R" if lr_bal else "-"
+                
+                # 2. Power-Werte (Intervals hat mehrere Felder dafür)
+                avg_pwr = safe_num(act.get('icu_average_watts') or act.get('device_watts') or act.get('average_watts'))
+                max_pwr = safe_num(act.get('icu_pm_p_max') or act.get('p_max') or act.get('max_watts'))
+                
                 row = [
                     date_part, 
                     time_part, 
@@ -79,12 +86,12 @@ def main():
                     safe_num(act.get('total_elevation_gain')), 
                     safe_num(act.get('total_elevation_loss')),
                     safe_num(act.get('average_stride_length')),
-                    "-", # gct balance
+                    gct_str, # ✅ GCT Balance eingefügt
                     0, # gct
                     0, # vertOsc
                     0, # gradeAdjustedSpeed
-                    safe_num(act.get('average_watts')), 
-                    safe_num(act.get('max_watts')),
+                    avg_pwr, # ✅ Avg Power eingefügt
+                    max_pwr, # ✅ Max Power eingefügt
                     safe_num(act.get('icu_tss')), 
                     0, # steps in activity
                     0, # totalReps
@@ -136,7 +143,7 @@ def main():
             if date_str in date_map:
                 row_idx = date_map[date_str]
                 health_sheet.update(f"A{row_idx}:J{row_idx}", [health_row])
-                print(f"📊 {date_str}: Update (Sleep {sleep_score}, Load {acute_load})")
+                print(f"📊 {date_str}: Update (Sleep {sleep_score})")
             else:
                 health_sheet.append_row(health_row)
                 print(f"📊 {date_str}: Neu (Sleep {sleep_score})")
