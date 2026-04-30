@@ -11,7 +11,7 @@ def safe_num(val, default=0):
     return float(val) if val is not None else default
 
 def main():
-    print("🚀 Skript gestartet (Intervals.icu Edition)...")
+    print("🚀 Skript gestartet (Intervals.icu Clean Edition v2)...")
     
     intervals_id = os.environ.get('INTERVALS_ID')
     intervals_api_key = os.environ.get('INTERVALS_API_KEY')
@@ -59,10 +59,6 @@ def main():
             
             if f"{date_part} {time_part}" not in existing_workouts:
                 
-                # --- SONDERFELDER AUSLESEN ---
-                lr_bal = act.get('avg_lr_balance')
-                gct_str = f"{round(lr_bal, 1)}% L / {round(100 - lr_bal, 1)}% R" if lr_bal else "-"
-                
                 avg_pwr = safe_num(act.get('icu_average_watts') or act.get('device_watts') or act.get('average_watts'))
                 max_pwr = safe_num(act.get('icu_pm_p_max') or act.get('p_max') or act.get('max_watts'))
                 
@@ -76,28 +72,16 @@ def main():
                     round(safe_num(act.get('moving_time')) / 60, 2),
                     safe_num(act.get('average_heartrate')), 
                     safe_num(act.get('max_heartrate')), 
-                    0, # aerobicTE
                     safe_num(act.get('average_cadence')), 
                     safe_num(act.get('max_cadence')),
                     round(safe_num(act.get('average_speed')) * 3.6, 2),
                     round(safe_num(act.get('max_speed')) * 3.6, 2),
                     safe_num(act.get('total_elevation_gain')), 
                     safe_num(act.get('total_elevation_loss')),
-                    round(safe_num(act.get('average_stride')), 2), # ✅ Stride Length
-                    gct_str, 
-                    0, # gct (nicht in API)
-                    0, # vertOsc (nicht in API)
-                    round(safe_num(act.get('gap')), 2), # ✅ GAP
+                    round(safe_num(act.get('average_stride')), 2), 
+                    round(safe_num(act.get('gap')), 2), 
                     avg_pwr, 
                     max_pwr, 
-                    safe_num(act.get('icu_tss')), 
-                    0, # steps in activity
-                    0, # totalReps
-                    0, # poses
-                    0, # bodyBatteryDrain
-                    safe_num(act.get('min_temp')), 
-                    safe_num(act.get('max_temp')),
-                    0, # avgResp
                     round(safe_num(act.get('moving_time')) / 60, 2),
                     round(safe_num(act.get('elapsed_time')) / 60, 2), 
                     safe_num(act.get('min_altitude')), 
