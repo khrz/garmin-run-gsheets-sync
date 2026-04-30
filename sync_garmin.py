@@ -62,30 +62,30 @@ def main():
                 avg_pwr = safe_num(act.get('icu_average_watts') or act.get('device_watts') or act.get('average_watts'))
                 max_pwr = safe_num(act.get('icu_pm_p_max') or act.get('p_max') or act.get('max_watts'))
                 
+                # Die exakten 22 Spalten für dein Sheet
                 row = [
-                    date_part, 
-                    time_part, 
-                    act.get('type') or '', 
-                    act.get('name') or '',
-                    round(safe_num(act.get('distance')) / 1000, 2),
-                    safe_num(act.get('calories')), 
-                    round(safe_num(act.get('moving_time')) / 60, 2),
-                    safe_num(act.get('average_heartrate')), 
-                    safe_num(act.get('max_heartrate')), 
-                    # Verdoppelt die Kadenz für alle Lauf-Arten (Run, Trail Run, Treadmill etc.)
-                    round(safe_num(act.get('average_cadence')) * 2) if 'run' in (act.get('type') or '').lower() or 'treadmill' in (act.get('type') or '').lower() else round(safe_num(act.get('average_cadence'))),
-                    round(safe_num(act.get('average_speed')) * 3.6, 2),
-                    round(safe_num(act.get('max_speed')) * 3.6, 2),
-                    safe_num(act.get('total_elevation_gain')), 
-                    safe_num(act.get('total_elevation_loss')),
-                    round(safe_num(act.get('average_stride')), 2), 
-                    round(safe_num(act.get('gap')), 2), 
-                    avg_pwr, 
-                    max_pwr, 
-                    round(safe_num(act.get('moving_time')) / 60, 2),
-                    round(safe_num(act.get('elapsed_time')) / 60, 2), 
-                    safe_num(act.get('min_altitude')), 
-                    safe_num(act.get('max_altitude'))
+                    date_part,                  # A
+                    time_part,                  # B
+                    act.get('type') or '',      # C
+                    act.get('name') or '',      # D
+                    round(safe_num(act.get('distance')) / 1000, 2), # E
+                    safe_num(act.get('calories')), # F
+                    round(safe_num(act.get('moving_time')) / 60, 2), # G
+                    safe_num(act.get('average_heartrate')), # H
+                    safe_num(act.get('max_heartrate')), # I
+                    cadence,                    # J
+                    round(safe_num(act.get('average_speed')) * 3.6, 2), # K
+                    round(safe_num(act.get('max_speed')) * 3.6, 2), # L
+                    safe_num(act.get('total_elevation_gain')), # M
+                    safe_num(act.get('total_elevation_loss')), # N
+                    round(safe_num(act.get('average_stride')), 2), # O
+                    round(safe_num(act.get('gap')), 2), # P
+                    avg_pwr,                    # Q
+                    max_pwr,                    # R
+                    round(safe_num(act.get('moving_time')) / 60, 2), # S
+                    round(safe_num(act.get('elapsed_time')) / 60, 2), # T
+                    round(min_elev, 1),         # U
+                    round(max_elev, 1)          # V
                 ]
                 workout_sheet.append_row(row)
                 print(f"✅ Workout: {date_part} {time_part} ({act.get('name', '')})")
